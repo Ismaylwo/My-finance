@@ -17,5 +17,20 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Восстанавливаем путь после редиректа с 404.html
+      (function() {
+        var redirect = sessionStorage.getItem('redirect');
+        if (redirect) {
+          sessionStorage.removeItem('redirect');
+          // Убираем префикс /My-finance, оставляем только внутренний путь SPA
+          var prefix = '/My-finance';
+          if (redirect.indexOf(prefix) === 0) {
+            redirect = redirect.slice(prefix.length) || '/';
+          }
+          window.history.replaceState(null, '', redirect);
+        }
+      })();
+    </script>
   </body>
 </html>
