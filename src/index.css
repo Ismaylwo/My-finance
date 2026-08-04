@@ -1,0 +1,241 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-surface-950 text-white font-sans antialiased selection:bg-primary-500/30 selection:text-primary-200;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.1) 0px, transparent 50%),
+      radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.06) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(244, 63, 94, 0.05) 0px, transparent 50%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  /* Light Theme Styles */
+  body.light-theme {
+    @apply bg-slate-100 text-slate-900;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.06) 0px, transparent 50%);
+  }
+
+  body.light-theme .glass {
+    background: rgba(255, 255, 255, 0.85);
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.05);
+    color: #0f172a;
+  }
+
+  body.light-theme .text-white {
+    color: #0f172a !important;
+  }
+
+  body.light-theme .text-white\/50,
+  body.light-theme .text-white\/40,
+  body.light-theme .text-white\/60,
+  body.light-theme .text-white\/70,
+  body.light-theme .text-white\/80 {
+    color: #475569 !important;
+  }
+
+  body.light-theme .bg-surface-900\/80,
+  body.light-theme .bg-surface-900\/60,
+  body.light-theme .bg-surface-900\/90 {
+    background-color: rgba(241, 245, 249, 0.9) !important;
+  }
+
+  body.light-theme .input-field {
+    background-color: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+  }
+
+  body.light-theme .table-row {
+    border-color: rgba(0,0,0,0.06);
+  }
+
+  body.light-theme .table-row:hover {
+    background-color: rgba(241, 245, 249, 0.8);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(13, 14, 23, 0.6);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.3);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 102, 241, 0.6);
+  }
+}
+
+@layer components {
+  /* Premium Glass Cards */
+  .glass {
+    background: rgba(22, 25, 43, 0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .glass-hover {
+    @apply glass transition-all duration-300 hover:-translate-y-0.5;
+  }
+
+  .glass-hover:hover {
+    background: rgba(27, 31, 53, 0.8);
+    border-color: rgba(99, 102, 241, 0.35);
+    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45), 0 0 25px 0 rgba(99, 102, 241, 0.15);
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply bg-gradient-to-r from-primary-600 via-primary-500 to-indigo-600 
+           hover:from-primary-500 hover:to-indigo-500 text-white font-semibold px-5 py-2.5 rounded-xl
+           transition-all duration-200 flex items-center gap-2.5 active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed shadow-glow-primary;
+  }
+
+  .btn-secondary {
+    @apply glass text-white/90 font-medium px-4 py-2.5 rounded-xl
+           transition-all duration-200 flex items-center gap-2 hover:border-primary-500/40 
+           hover:bg-white/10 hover:text-white active:scale-[0.98];
+  }
+
+  .btn-danger {
+    @apply bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 
+           text-white font-medium px-4 py-2 rounded-xl transition-all duration-200 
+           flex items-center gap-2 shadow-glow-rose active:scale-[0.98];
+  }
+
+  /* Form controls */
+  .input-field {
+    @apply w-full bg-surface-900/80 border border-white/10 rounded-xl px-4 py-3
+           text-white placeholder-white/30 outline-none
+           focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20
+           hover:border-white/20 transition-all duration-200 text-sm;
+  }
+
+  .label {
+    @apply block text-xs font-semibold uppercase tracking-wider text-white/50 mb-1.5;
+  }
+
+  /* Cards */
+  .card {
+    @apply glass rounded-2xl p-6 relative transition-all duration-300;
+  }
+
+  .card-glow {
+    @apply card hover:border-primary-500/30 hover:shadow-card-hover;
+  }
+
+  /* Stat Card Variants */
+  .stat-income {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.02) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+  }
+
+  .stat-expense {
+    background: linear-gradient(135deg, rgba(244, 63, 94, 0.12) 0%, rgba(244, 63, 94, 0.02) 100%);
+    border: 1px solid rgba(244, 63, 94, 0.25);
+  }
+
+  .stat-profit {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(99, 102, 241, 0.02) 100%);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+  }
+
+  .stat-personal {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(245, 158, 11, 0.02) 100%);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+  }
+
+  /* Tables */
+  .table-row {
+    @apply border-b border-white/5 hover:bg-white/[0.04] transition-colors duration-150;
+  }
+
+  /* Compact Mode Utility */
+  .compact-table table th {
+    @apply py-2 px-3 text-[11px] !important;
+  }
+
+  .compact-table table td {
+    @apply py-2 px-3 text-xs !important;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide transition-all;
+  }
+
+  .badge-fixed {
+    @apply badge bg-blue-500/15 text-blue-300 border border-blue-500/30 hover:bg-blue-500/25;
+  }
+
+  .badge-variable {
+    @apply badge bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 50%, #818cf8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-gold {
+    background: linear-gradient(135deg, #fef08a 0%, #f59e0b 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-emerald {
+    background: linear-gradient(135deg, #a7f3d0 0%, #10b981 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.35);
+  }
+
+  .glow-income {
+    box-shadow: 0 0 25px rgba(16, 185, 129, 0.25);
+  }
+
+  .glow-expense {
+    box-shadow: 0 0 25px rgba(244, 63, 94, 0.25);
+  }
+}
