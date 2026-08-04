@@ -1,45 +1,36 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useAppContext } from './useAppContext'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
-import type { Expense, ExpenseInsert } from '../types'
+import type { ExpenseInsert } from '../types'
 
 export function useExpenses() {
   const { user } = useAuth()
-  const [expenses, setExpenses] = useState<Expense[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetch = useCallback(async () => {
-    if (!user) return
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('expenses')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('date', { ascending: false })
-    if (error) setError(error.message)
-    else setExpenses(data as Expense[])
-    setLoading(false)
-  }, [user])
-
-  useEffect(() => { fetch() }, [fetch])
+  const { expenses, setExpenses, loading, error, refetchAll } = useAppContext()
 
   const add = async (item: ExpenseInsert) => {
     if (!user) return { error: 'Не авторизован' }
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('expenses')
       .insert({ ...item, user_id: user.id })
-    if (!error) await fetch()
+      .select()
+      .single()
+      
+    if (!error && data) {
+      setExpenses(prev => [data, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()))
+    } else {
+      await refetchAll(false)
+    }
     return { error: error?.message ?? null }
   }
 
   const remove = async (id: string) => {
+    setExpenses(prev => prev.filter(e => e.id !== id))
     const { error } = await supabase.from('expenses').delete().eq('id', id)
-    if (!error) await fetch()
+    if (error) await refetchAll(false)
     return { error: error?.message ?? null }
   }
 
   const total = expenses.reduce((s, e) => s + e.amount, 0)
 
-  return { expenses, loading, error, add, remove, refetch: fetch, total }
+  return { expenses, loading, error, add, remove, refetch: () => refetchAll(true), total }
 }

@@ -1,41 +1,33 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useAppContext } from './useAppContext'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
-import type { Income, IncomeInsert } from '../types'
+import type { IncomeInsert } from '../types'
 
 export function useIncome() {
   const { user } = useAuth()
-  const [incomes, setIncomes] = useState<Income[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetch = useCallback(async () => {
-    if (!user) return
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('income')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('date', { ascending: false })
-    if (error) setError(error.message)
-    else setIncomes(data as Income[])
-    setLoading(false)
-  }, [user])
-
-  useEffect(() => { fetch() }, [fetch])
+  const { incomes, setIncomes, loading, error, refetchAll } = useAppContext()
 
   const add = async (item: IncomeInsert) => {
     if (!user) return { error: 'Не авторизован' }
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('income')
       .insert({ ...item, user_id: user.id })
-    if (!error) await fetch()
+      .select()
+      .single()
+      
+    if (!error && data) {
+      setIncomes(prev => [data, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()))
+    } else {
+      await refetchAll(false)
+    }
     return { error: error?.message ?? null }
   }
 
   const remove = async (id: string) => {
+    // Оптимистичное удаление
+    setIncomes(prev => prev.filter(i => i.id !== id))
     const { error } = await supabase.from('income').delete().eq('id', id)
-    if (!error) await fetch()
+    if (error) await refetchAll(false)
     return { error: error?.message ?? null }
   }
 
@@ -43,7 +35,7 @@ export function useIncome() {
     // Оптимистичное обновление
     setIncomes(prev => prev.map(item => item.id === id ? { ...item, is_paid } : item))
     const { error } = await supabase.from('income').update({ is_paid }).eq('id', id)
-    if (error) await fetch()
+    if (error) await refetchAll(false)
     return { error: error?.message ?? null }
   }
 
@@ -52,5 +44,5 @@ export function useIncome() {
   const totalPaid = incomes.filter(i => i.is_paid !== false).reduce((s, i) => s + i.total_amount, 0)
   const totalUnpaid = incomes.filter(i => i.is_paid === false).reduce((s, i) => s + i.total_amount, 0)
 
-  return { incomes, loading, error, add, remove, togglePaid, refetch: fetch, totalAmount, totalKg, totalPaid, totalUnpaid }
+  return { incomes, loading, error, add, remove, togglePaid, refetch: () => refetchAll(true), totalAmount, totalKg, totalPaid, totalUnpaid }
 }

@@ -1,18 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
-import { useAuth } from './useAuth'
+import { useState, useMemo } from 'react'
+import { useAppContext } from './useAppContext'
 import type { MonthlySummary, DashboardStats } from '../types'
-
-// Глобальный кэш в памяти (Stale-While-Revalidate) для мгновенного отклика (0 ms)
-let cachedStats: Record<string, DashboardStats> = {}
-let cachedMonthlyData: MonthlySummary[] | null = null
-let cachedCategoryBreakdown: Record<string, { name: string; value: number }[]> = {}
-
-export function clearDashboardCache() {
-  cachedStats = {}
-  cachedMonthlyData = null
-  cachedCategoryBreakdown = {}
-}
 
 const MONTH_NAMES_RU: Record<string, string> = {
   '01': 'Январь', '02': 'Февраль', '03': 'Март', '04': 'Апрель',
@@ -28,70 +16,34 @@ export function formatMonthName(monthStr: string): string {
 }
 
 export function useDashboard() {
-  const { user } = useAuth()
   const now = new Date()
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr)
-  const [stats, setStats] = useState<DashboardStats>(
-    cachedStats[currentMonthStr] || {
-      totalIncome: 0, totalExpenses: 0, totalPersonal: 0,
-      netProfit: 0, totalKgSold: 0,
+  const { incomes, expenses, personalExpenses, loading, refetchAll } = useAppContext()
+
+  const monthOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = []
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      opts.push({ value: val, label: formatMonthName(val) })
     }
-  )
-  const [monthlyData, setMonthlyData] = useState<MonthlySummary[]>(cachedMonthlyData || [])
-  const [categoryBreakdown, setCategoryBreakdown] = useState<{ name: string; value: number }[]>(
-    cachedCategoryBreakdown[currentMonthStr] || []
-  )
-  const [loading, setLoading] = useState(!cachedStats[currentMonthStr])
+    opts.push({ value: 'all', label: 'За всё время' })
+    return opts
+  }, [now.getFullYear(), now.getMonth()])
 
-  // Список вариантов доступных месяцев за 12 месяцев + "За всё время"
-  const monthOptions: { value: string; label: string }[] = []
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    monthOptions.push({ value: val, label: formatMonthName(val) })
-  }
-  monthOptions.push({ value: 'all', label: 'За всё время' })
-
-  const fetch = useCallback(async (showLoadingSpinner = false) => {
-    if (!user) return
-    if (showLoadingSpinner || !cachedStats[selectedMonth]) {
-      setLoading(true)
-    }
-
-    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1)
-    const fromDate = `${twelveMonthsAgo.getFullYear()}-${String(twelveMonthsAgo.getMonth() + 1).padStart(2, '0')}-01`
-
-    const [incRes, expRes, perRes] = await Promise.all([
-      supabase.from('income').select('date, total_amount, quantity_kg, is_paid').eq('user_id', user.id).gte('date', fromDate),
-      supabase.from('expenses').select('date, amount, category').eq('user_id', user.id).gte('date', fromDate),
-      supabase.from('personal_expenses').select('date, amount').eq('user_id', user.id).gte('date', fromDate),
-    ])
-
-    const incomes = incRes.data ?? []
-    const expenses = expRes.data ?? []
-    const personals = perRes.data ?? []
-
+  const stats = useMemo(() => {
     const isAll = selectedMonth === 'all'
     const selIncomes  = incomes.filter(i => isAll || i.date.startsWith(selectedMonth))
     const selExpenses = expenses.filter(e => isAll || e.date.startsWith(selectedMonth))
-    const selPersonals = personals.filter(p => isAll || p.date.startsWith(selectedMonth))
+    const selPersonals = personalExpenses.filter(p => isAll || p.date.startsWith(selectedMonth))
 
     const totalIncome   = selIncomes.reduce((s, r) => s + (r.total_amount || 0), 0)
     const totalKgSold   = selIncomes.reduce((s, r) => s + (r.quantity_kg || 0), 0)
     const totalExpenses = selExpenses.reduce((s, r) => s + (r.amount || 0), 0)
     const totalPersonal = selPersonals.reduce((s, r) => s + (r.amount || 0), 0)
     const netProfit     = totalIncome - totalExpenses
-
-    const categoryMap: Record<string, number> = {}
-    selExpenses.forEach(exp => {
-      const cat = exp.category || 'Прочее'
-      categoryMap[cat] = (categoryMap[cat] || 0) + (exp.amount || 0)
-    })
-    const breakdown = Object.entries(categoryMap)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
 
     let incomeTrend: number | undefined
     let expenseTrend: number | undefined
@@ -114,11 +66,28 @@ export function useDashboard() {
       profitTrend  = prevNetProfit > 0 ? ((netProfit - prevNetProfit) / prevNetProfit) * 100 : undefined
     }
 
-    const newStats: DashboardStats = {
+    return {
       totalIncome, totalExpenses, totalPersonal, netProfit, totalKgSold,
       incomeTrend, expenseTrend, profitTrend
-    }
+    } as DashboardStats
+  }, [incomes, expenses, personalExpenses, selectedMonth])
 
+  const categoryBreakdown = useMemo(() => {
+    const isAll = selectedMonth === 'all'
+    const selExpenses = expenses.filter(e => isAll || e.date.startsWith(selectedMonth))
+    const categoryMap: Record<string, number> = {}
+    
+    selExpenses.forEach(exp => {
+      const cat = exp.category || 'Прочее'
+      categoryMap[cat] = (categoryMap[cat] || 0) + (exp.amount || 0)
+    })
+    
+    return Object.entries(categoryMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  }, [expenses, selectedMonth])
+
+  const monthlyData = useMemo(() => {
     const months: MonthlySummary[] = []
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
@@ -126,7 +95,7 @@ export function useDashboard() {
 
       const mIncomes  = incomes.filter(item => item.date.startsWith(monthPrefix))
       const mExpenses = expenses.filter(item => item.date.startsWith(monthPrefix))
-      const mPersonals = personals.filter(item => item.date.startsWith(monthPrefix))
+      const mPersonals = personalExpenses.filter(item => item.date.startsWith(monthPrefix))
 
       const total_income   = mIncomes.reduce((s, r) => s + (r.total_amount || 0), 0)
       const total_kg_sold  = mIncomes.reduce((s, r) => s + (r.quantity_kg || 0), 0)
@@ -142,30 +111,12 @@ export function useDashboard() {
         total_kg_sold,
       })
     }
-
-    cachedStats[selectedMonth] = newStats
-    cachedMonthlyData = months
-    cachedCategoryBreakdown[selectedMonth] = breakdown
-
-    setStats(newStats)
-    setMonthlyData(months)
-    setCategoryBreakdown(breakdown)
-    setLoading(false)
-  }, [user, selectedMonth])
-
-  useEffect(() => {
-    fetch()
-    const handleProfileUpdated = () => {
-      clearDashboardCache()
-      fetch(true)
-    }
-    window.addEventListener('profile_updated', handleProfileUpdated)
-    return () => window.removeEventListener('profile_updated', handleProfileUpdated)
-  }, [fetch])
+    return months
+  }, [incomes, expenses, personalExpenses, now.getFullYear(), now.getMonth()])
 
   return {
     stats, monthlyData, categoryBreakdown, loading,
     selectedMonth, setSelectedMonth, monthOptions,
-    refetch: () => fetch(true)
+    refetch: () => refetchAll(true)
   }
 }

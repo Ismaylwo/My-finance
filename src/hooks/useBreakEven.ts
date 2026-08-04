@@ -1,167 +1,22 @@
-import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
-import { useAuth } from './useAuth'
-import type { Profile, BreakEvenResult } from '../types'
-
-// Глобальный кэш профиля в памяти для мгновенной отрисовки (0 ms)
-let cachedProfile: Profile | null = null
-let cachedBusinessExpenses: Record<string, number> = {}
-
-export function clearAllMemoryCaches() {
-  cachedProfile = null
-  cachedBusinessExpenses = {}
-}
-
-const DEFAULT_PROFILE: Profile = {
-  id: '',
-  user_id: '',
-  business_name: '',
-  raw_purchase_price_per_kg: 0,
-  yield_percent: 0,
-  selling_price_per_kg: 0,
-  desired_profit: 0,
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-}
+import { useCallback, useMemo } from 'react'
+import { useAppContext } from './useAppContext'
+import type { BreakEvenResult } from '../types'
 
 export function useBreakEven(selectedMonth?: string) {
-  const { user } = useAuth()
   const now = new Date()
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const monthKey = selectedMonth || currentMonthStr
 
-  const [profile, setProfile] = useState<Profile | null>(cachedProfile)
-  // Если кэша нет и пользователь авторизован — считаем что данные ещё грузятся (избегаем флэша Onboarding)
-  const [loading, setLoading] = useState(Boolean(user) && !cachedProfile)
-  const [businessExpenses, setBusinessExpenses] = useState<number>(cachedBusinessExpenses[monthKey] || 0)
+  const { profile, expenses, loading, refetchAll, updateProfile, resetEntireBusiness } = useAppContext()
 
-  const fetchAll = useCallback(async (showLoading = false) => {
-    if (!user) return
-    if (showLoading || !cachedProfile) {
-      setLoading(true)
-    }
-
+  // Calculate businessExpenses for the selected month
+  const businessExpenses = useMemo(() => {
     const isAll = monthKey === 'all'
-    const from = isAll ? '2000-01-01' : `${monthKey}-01`
+    const filteredExpenses = expenses.filter(e => isAll || e.date.startsWith(monthKey))
+    return filteredExpenses.reduce((s, e) => s + (e.amount || 0), 0)
+  }, [expenses, monthKey])
 
-    // Для обычного месяца — точная граница конца месяца
-    let to: string | null = null
-    if (!isAll) {
-      const [yyyy, mm] = monthKey.split('-').map(Number)
-      const lastDay = new Date(yyyy, mm, 0).getDate()
-      to = `${monthKey}-${String(lastDay).padStart(2, '0')}`
-    }
-
-    let expQuery = supabase
-      .from('expenses')
-      .select('date, amount')
-      .eq('user_id', user.id)
-      .gte('date', from)
-
-    if (to) expQuery = expQuery.lte('date', to)
-
-    const [profRes, expRes] = await Promise.all([
-      supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle(),
-      expQuery,
-    ])
-
-    if (profRes.data) {
-      cachedProfile = profRes.data as Profile
-      setProfile(profRes.data as Profile)
-    } else {
-      cachedProfile = null
-      setProfile(null)
-    }
-
-    if (expRes.data) {
-      const totalExp = expRes.data.reduce((s, e) => s + (e.amount || 0), 0)
-      cachedBusinessExpenses[monthKey] = totalExp
-      setBusinessExpenses(totalExp)
-    } else {
-      cachedBusinessExpenses[monthKey] = 0
-      setBusinessExpenses(0)
-    }
-
-    setLoading(false)
-  }, [user, monthKey])
-
-  useEffect(() => {
-    fetchAll()
-    // При обновлении профиля — перезагружаем с сервера (не из кэша!)
-    const handleProfileUpdated = () => {
-      fetchAll(false)
-    }
-    window.addEventListener('profile_updated', handleProfileUpdated)
-    return () => window.removeEventListener('profile_updated', handleProfileUpdated)
-  }, [fetchAll])
-
-  // При смене месяца — используем закэшированное значение если есть
-  useEffect(() => {
-    if (cachedBusinessExpenses[monthKey] !== undefined) {
-      setBusinessExpenses(cachedBusinessExpenses[monthKey])
-    }
-  }, [monthKey])
-
-  const updateProfile = async (updates: Partial<Pick<Profile, 'business_name' | 'raw_purchase_price_per_kg' | 'yield_percent' | 'selling_price_per_kg' | 'desired_profit'>>) => {
-    if (!user) return
-    
-    const current = profile || { ...DEFAULT_PROFILE, user_id: user.id }
-    const updated: Profile = {
-      ...current,
-      ...updates,
-      updated_at: new Date().toISOString(),
-    }
-    // Оптимистичное обновление — сразу отображаем новые данные
-    cachedProfile = updated
-    setProfile(updated)
-
-    // Сохранение в Supabase через UPSERT
-    const { error } = await supabase
-      .from('profiles')
-      .upsert(
-        {
-          user_id: user.id,
-          business_name: updated.business_name || null,
-          raw_purchase_price_per_kg: updated.raw_purchase_price_per_kg ?? 0,
-          yield_percent: updated.yield_percent ?? 0,
-          selling_price_per_kg: updated.selling_price_per_kg ?? 0,
-          desired_profit: updated.desired_profit ?? 0,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id' }
-      )
-
-    if (error) {
-      console.error('Ошибка сохранения профиля:', error.message)
-      // При ошибке — читаем реальные данные с сервера
-      await fetchAll(false)
-    } else {
-      // Уведомляем другие компоненты об обновлении
-      window.dispatchEvent(new Event('profile_updated'))
-    }
-  }
-
-  const resetEntireBusiness = async () => {
-    if (!user) return
-
-    // 1. Очищаем записи во всех таблицах
-    await Promise.all([
-      supabase.from('income').delete().eq('user_id', user.id),
-      supabase.from('expenses').delete().eq('user_id', user.id),
-      supabase.from('personal_expenses').delete().eq('user_id', user.id),
-      supabase.from('profiles').delete().eq('user_id', user.id),
-    ])
-
-    // 2. Полностью сбрасываем кэш в памяти в 0
-    cachedProfile = null
-    cachedBusinessExpenses = {}
-    setProfile(null)
-    setBusinessExpenses(0)
-
-    window.dispatchEvent(new Event('profile_updated'))
-  }
-
-  const calculate = (customDesiredProfit?: number): BreakEvenResult | null => {
+  const calculate = useCallback((customDesiredProfit?: number): BreakEvenResult | null => {
     if (!profile) return null
 
     const rawPurchasePrice = profile.raw_purchase_price_per_kg ?? 0
@@ -169,7 +24,6 @@ export function useBreakEven(selectedMonth?: string) {
     const price = profile.selling_price_per_kg ?? 0
     const desiredProfit = customDesiredProfit !== undefined ? customDesiredProfit : (profile.desired_profit ?? 0)
 
-    // Если цены не настроены (равны 0), калькулятор возвращает null (чистый старт!)
     if (rawPurchasePrice <= 0 || price <= 0 || yieldPct <= 0) return null
 
     const yieldRatio = yieldPct / 100
@@ -208,7 +62,15 @@ export function useBreakEven(selectedMonth?: string) {
       fullCostPerKg,
       netProfitPerKg,
     }
-  }
+  }, [profile, businessExpenses])
 
-  return { profile, loading, businessExpenses, updateProfile, resetEntireBusiness, calculate, refetch: () => fetchAll(true) }
+  return {
+    profile,
+    loading,
+    businessExpenses,
+    updateProfile,
+    resetEntireBusiness,
+    calculate,
+    refetch: () => refetchAll(true),
+  }
 }

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthContext, useAuthProvider } from './hooks/useAuth'
+import { AppProvider } from './hooks/useAppContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -19,18 +20,20 @@ function AppRoutes() {
         path="/*"
         element={
           <ProtectedRoute>
-            <Layout>
-              <Routes>
-                <Route path="/"           element={<Dashboard />} />
-                <Route path="/income"     element={<IncomePage />} />
-                <Route path="/expenses"   element={<ExpensesPage />} />
-                <Route path="/personal"   element={<PersonalPage />} />
-                <Route path="/breakeven"  element={<BreakEvenPage />} />
-                <Route path="/analytics"  element={<AnalyticsPage />} />
-                <Route path="/settings"   element={<SettingsPage />} />
-                <Route path="*"           element={<Navigate to="/" replace />} />
-              </Routes>
-            </Layout>
+            <AppProvider>
+              <Layout>
+                <Routes>
+                  <Route path="/"           element={<Dashboard />} />
+                  <Route path="/income"     element={<IncomePage />} />
+                  <Route path="/expenses"   element={<ExpensesPage />} />
+                  <Route path="/personal"   element={<PersonalPage />} />
+                  <Route path="/breakeven"  element={<BreakEvenPage />} />
+                  <Route path="/analytics"  element={<AnalyticsPage />} />
+                  <Route path="/settings"   element={<SettingsPage />} />
+                  <Route path="*"           element={<Navigate to="/" replace />} />
+                </Routes>
+              </Layout>
+            </AppProvider>
           </ProtectedRoute>
         }
       />
