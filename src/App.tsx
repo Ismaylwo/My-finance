@@ -46,7 +46,7 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={auth}>
-      <BrowserRouter basename="/My-Finance">
+      <BrowserRouter basename="/My-finance">
         <AppRoutes />
       </BrowserRouter>
     </AuthContext.Provider>
