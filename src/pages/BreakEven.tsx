@@ -28,7 +28,8 @@ export default function BreakEvenPage() {
     }
   }, [profile])
 
-  const result = calculate(editForm.desired_profit)
+  // Используем сохранённое значение из профиля, а не из формы — чтобы расчёт не прыгал при вводе
+  const result = calculate()
 
   const handleSave = async () => {
     setSaving(true)

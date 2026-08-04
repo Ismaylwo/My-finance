@@ -44,9 +44,25 @@ export function useBreakEven(selectedMonth?: string) {
     const isAll = monthKey === 'all'
     const from = isAll ? '2000-01-01' : `${monthKey}-01`
 
+    // Для обычного месяца — точная граница конца месяца
+    let to: string | null = null
+    if (!isAll) {
+      const [yyyy, mm] = monthKey.split('-').map(Number)
+      const lastDay = new Date(yyyy, mm, 0).getDate()
+      to = `${monthKey}-${String(lastDay).padStart(2, '0')}`
+    }
+
+    let expQuery = supabase
+      .from('expenses')
+      .select('date, amount')
+      .eq('user_id', user.id)
+      .gte('date', from)
+
+    if (to) expQuery = expQuery.lte('date', to)
+
     const [profRes, expRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle(),
-      supabase.from('expenses').select('date, amount').eq('user_id', user.id).gte('date', from)
+      expQuery,
     ])
 
     if (profRes.data) {
@@ -58,10 +74,12 @@ export function useBreakEven(selectedMonth?: string) {
     }
 
     if (expRes.data) {
-      const filtered = isAll ? expRes.data : expRes.data.filter(e => e.date.startsWith(monthKey))
-      const totalExp = filtered.reduce((s, e) => s + (e.amount || 0), 0)
+      const totalExp = expRes.data.reduce((s, e) => s + (e.amount || 0), 0)
       cachedBusinessExpenses[monthKey] = totalExp
       setBusinessExpenses(totalExp)
+    } else {
+      cachedBusinessExpenses[monthKey] = 0
+      setBusinessExpenses(0)
     }
 
     setLoading(false)
@@ -69,12 +87,20 @@ export function useBreakEven(selectedMonth?: string) {
 
   useEffect(() => {
     fetchAll()
+    // При обновлении профиля — перезагружаем с сервера (не из кэша!)
     const handleProfileUpdated = () => {
-      setProfile(cachedProfile)
+      fetchAll(false)
     }
     window.addEventListener('profile_updated', handleProfileUpdated)
     return () => window.removeEventListener('profile_updated', handleProfileUpdated)
   }, [fetchAll])
+
+  // При смене месяца — используем закэшированное значение если есть
+  useEffect(() => {
+    if (cachedBusinessExpenses[monthKey] !== undefined) {
+      setBusinessExpenses(cachedBusinessExpenses[monthKey])
+    }
+  }, [monthKey])
 
   const updateProfile = async (updates: Partial<Pick<Profile, 'business_name' | 'raw_purchase_price_per_kg' | 'yield_percent' | 'selling_price_per_kg' | 'desired_profit'>>) => {
     if (!user) return
@@ -85,6 +111,7 @@ export function useBreakEven(selectedMonth?: string) {
       ...updates,
       updated_at: new Date().toISOString(),
     }
+    // Оптимистичное обновление — сразу отображаем новые данные
     cachedProfile = updated
     setProfile(updated)
 
@@ -106,8 +133,12 @@ export function useBreakEven(selectedMonth?: string) {
 
     if (error) {
       console.error('Ошибка сохранения профиля:', error.message)
+      // При ошибке — читаем реальные данные с сервера
+      await fetchAll(false)
+    } else {
+      // Уведомляем другие компоненты об обновлении
+      window.dispatchEvent(new Event('profile_updated'))
     }
-    window.dispatchEvent(new Event('profile_updated'))
   }
 
   const resetEntireBusiness = async () => {
