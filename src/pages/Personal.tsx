@@ -37,7 +37,7 @@ export default function PersonalPage() {
   const categoryTotals = PERSONAL_CATEGORIES
     .map(cat => ({
       name: cat,
-      value: items.filter(i => i.category === cat).reduce((s, i) => s + i.amount, 0)
+      value: items.filter(i => i.category === cat).reduce((s, i) => s + Number(i.amount), 0)
     }))
     .filter(c => c.value > 0)
 

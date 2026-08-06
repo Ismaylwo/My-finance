@@ -39,10 +39,10 @@ export function useIncome() {
     return { error: error?.message ?? null }
   }
 
-  const totalAmount = incomes.reduce((s, i) => s + i.total_amount, 0)
-  const totalKg = incomes.reduce((s, i) => s + i.quantity_kg, 0)
-  const totalPaid = incomes.filter(i => i.is_paid !== false).reduce((s, i) => s + i.total_amount, 0)
-  const totalUnpaid = incomes.filter(i => i.is_paid === false).reduce((s, i) => s + i.total_amount, 0)
+  const totalAmount = incomes.reduce((s, i) => s + Number(i.total_amount), 0)
+  const totalKg = incomes.reduce((s, i) => s + Number(i.quantity_kg), 0)
+  const totalPaid = incomes.filter(i => i.is_paid !== false).reduce((s, i) => s + Number(i.total_amount), 0)
+  const totalUnpaid = incomes.filter(i => i.is_paid === false).reduce((s, i) => s + Number(i.total_amount), 0)
 
   return { incomes, loading, error, add, remove, togglePaid, refetch: () => refetchAll(true), totalAmount, totalKg, totalPaid, totalUnpaid }
 }

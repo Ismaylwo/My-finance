@@ -20,7 +20,7 @@ export function useDashboard() {
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr)
-  const { incomes, expenses, personalExpenses, loading, refetchAll } = useAppContext()
+  const { incomes, expenses, personalExpenses, rawMaterialPurchases, loading, refetchAll } = useAppContext()
 
   const monthOptions = useMemo(() => {
     const opts: { value: string; label: string }[] = []
@@ -38,11 +38,17 @@ export function useDashboard() {
     const selIncomes  = incomes.filter(i => isAll || i.date.startsWith(selectedMonth))
     const selExpenses = expenses.filter(e => isAll || e.date.startsWith(selectedMonth))
     const selPersonals = personalExpenses.filter(p => isAll || p.date.startsWith(selectedMonth))
+    const selPurchases = rawMaterialPurchases.filter(p => isAll || p.date.startsWith(selectedMonth))
 
-    const totalIncome   = selIncomes.reduce((s, r) => s + (r.total_amount || 0), 0)
-    const totalKgSold   = selIncomes.reduce((s, r) => s + (r.quantity_kg || 0), 0)
-    const totalExpenses = selExpenses.reduce((s, r) => s + (r.amount || 0), 0)
-    const totalPersonal = selPersonals.reduce((s, r) => s + (r.amount || 0), 0)
+    const totalIncome   = selIncomes.reduce((s, r) => s + (Number(r.total_amount) || 0), 0)
+    const totalKgSold   = selIncomes.reduce((s, r) => s + (Number(r.quantity_kg) || 0), 0)
+    
+    // Расходы бизнеса + Траты на закупку сырья
+    const bizExpenses   = selExpenses.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+    const rawCosts      = selPurchases.reduce((s, r) => s + (Number(r.total_cost) || 0), 0)
+    
+    const totalExpenses = bizExpenses + rawCosts
+    const totalPersonal = selPersonals.reduce((s, r) => s + (Number(r.amount) || 0), 0)
     const netProfit     = totalIncome - totalExpenses
 
     let incomeTrend: number | undefined
@@ -56,9 +62,12 @@ export function useDashboard() {
 
       const prevIncomes  = incomes.filter(i => i.date.startsWith(prevPrefix))
       const prevExpenses = expenses.filter(e => e.date.startsWith(prevPrefix))
+      const prevPurchases = rawMaterialPurchases.filter(p => p.date.startsWith(prevPrefix))
 
-      const prevIncTotal = prevIncomes.reduce((s, r) => s + (r.total_amount || 0), 0)
-      const prevExpTotal = prevExpenses.reduce((s, r) => s + (r.amount || 0), 0)
+      const prevIncTotal = prevIncomes.reduce((s, r) => s + (Number(r.total_amount) || 0), 0)
+      const prevBizExp   = prevExpenses.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+      const prevRawExp   = prevPurchases.reduce((s, r) => s + (Number(r.total_cost) || 0), 0)
+      const prevExpTotal = prevBizExp + prevRawExp
       const prevNetProfit = prevIncTotal - prevExpTotal
 
       incomeTrend  = prevIncTotal > 0 ? ((totalIncome - prevIncTotal) / prevIncTotal) * 100 : undefined
@@ -70,7 +79,7 @@ export function useDashboard() {
       totalIncome, totalExpenses, totalPersonal, netProfit, totalKgSold,
       incomeTrend, expenseTrend, profitTrend
     } as DashboardStats
-  }, [incomes, expenses, personalExpenses, selectedMonth])
+  }, [incomes, expenses, personalExpenses, rawMaterialPurchases, selectedMonth])
 
   const categoryBreakdown = useMemo(() => {
     const isAll = selectedMonth === 'all'
@@ -82,10 +91,17 @@ export function useDashboard() {
       categoryMap[cat] = (categoryMap[cat] || 0) + (exp.amount || 0)
     })
     
+    // Добавляем Закупки сырья как отдельную категорию расходов в диаграмме
+    const selPurchases = rawMaterialPurchases.filter(p => isAll || p.date.startsWith(selectedMonth))
+    const totalPurchases = selPurchases.reduce((s, r) => s + (Number(r.total_cost) || 0), 0)
+    if (totalPurchases > 0) {
+      categoryMap['Закупка сырья (Склад)'] = totalPurchases
+    }
+    
     return Object.entries(categoryMap)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
-  }, [expenses, selectedMonth])
+  }, [expenses, rawMaterialPurchases, selectedMonth])
 
   const monthlyData = useMemo(() => {
     const months: MonthlySummary[] = []
@@ -96,23 +112,27 @@ export function useDashboard() {
       const mIncomes  = incomes.filter(item => item.date.startsWith(monthPrefix))
       const mExpenses = expenses.filter(item => item.date.startsWith(monthPrefix))
       const mPersonals = personalExpenses.filter(item => item.date.startsWith(monthPrefix))
+      const mPurchases = rawMaterialPurchases.filter(item => item.date.startsWith(monthPrefix))
 
-      const total_income   = mIncomes.reduce((s, r) => s + (r.total_amount || 0), 0)
-      const total_kg_sold  = mIncomes.reduce((s, r) => s + (r.quantity_kg || 0), 0)
-      const total_expenses = mExpenses.reduce((s, r) => s + (r.amount || 0), 0)
-      const total_personal = mPersonals.reduce((s, r) => s + (r.amount || 0), 0)
+      const total_income   = mIncomes.reduce((s, r) => s + (Number(r.total_amount) || 0), 0)
+      const biz_expenses   = mExpenses.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+      const raw_expenses   = mPurchases.reduce((s, r) => s + (Number(r.total_cost) || 0), 0)
+      const total_expenses = biz_expenses + raw_expenses
+      const total_personal = mPersonals.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+      const net_profit     = total_income - total_expenses
+      const total_kg_sold  = mIncomes.reduce((s, r) => s + (Number(r.quantity_kg) || 0), 0)
 
       months.push({
         month: monthPrefix,
         total_income,
         total_expenses,
         total_personal,
-        net_profit: total_income - total_expenses,
+        net_profit,
         total_kg_sold,
       })
     }
     return months
-  }, [incomes, expenses, personalExpenses, now.getFullYear(), now.getMonth()])
+  }, [now.getFullYear(), now.getMonth(), incomes, expenses, personalExpenses, rawMaterialPurchases])
 
   return {
     stats, monthlyData, categoryBreakdown, loading,

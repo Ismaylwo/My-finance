@@ -3,7 +3,6 @@ import { Settings, Building2, Sun, Moon, Trash2, Check, AlertTriangle, Sparkles,
 import { useBreakEven } from '../hooks/useBreakEven'
 import { useAuth } from '../hooks/useAuth'
 import Tooltip from '../components/Tooltip'
-import { CURRENCY } from '../types'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -19,6 +18,9 @@ export default function SettingsPage() {
     yield_percent: 0,
     selling_price_per_kg: 0,
     desired_profit: 0,
+    daily_capacity_kg: 0,
+    initial_raw_kg: 0,
+    initial_finished_kg: 0,
   })
 
   const [saving, setSaving] = useState(false)
@@ -37,9 +39,13 @@ export default function SettingsPage() {
         yield_percent: profile.yield_percent ?? 0,
         selling_price_per_kg: profile.selling_price_per_kg ?? 0,
         desired_profit: profile.desired_profit ?? 0,
+        daily_capacity_kg: profile.daily_capacity_kg ?? 0,
+        initial_raw_kg: profile.initial_raw_kg ?? 0,
+        initial_finished_kg: profile.initial_finished_kg ?? 0,
       })
     }
   }, [profile])
+
 
   const toggleTheme = (newTheme: 'dark' | 'light') => {
     setTheme(newTheme)
@@ -184,63 +190,7 @@ export default function SettingsPage() {
           <p className="text-white/40 text-xs mt-1">Отображается в сайдбаре и отчётах</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
-          <div>
-            <label className="label flex items-center justify-between">
-              <span>Закупка сырья</span>
-              <Tooltip title="Закупка" content="Цена за 1 кг исходного необработанного материала у поставщика." />
-            </label>
-            <input
-              type="number" step="0.01" min="0"
-              value={form.raw_purchase_price_per_kg || ''}
-              onChange={e => setForm(f => ({ ...f, raw_purchase_price_per_kg: parseFloat(e.target.value) || 0 }))}
-              className="input-field" required
-            />
-            <p className="text-white/30 text-[11px] mt-1">{CURRENCY} / кг</p>
-          </div>
 
-          <div>
-            <label className="label flex items-center justify-between">
-              <span>Выход продукции</span>
-              <Tooltip title="Выход %" content="Процент чистого готового сырья из 100% закупленного. Усушка = 100 - Выход." />
-            </label>
-            <input
-              type="number" step="0.1" min="1" max="100"
-              value={form.yield_percent || ''}
-              onChange={e => setForm(f => ({ ...f, yield_percent: parseFloat(e.target.value) || 0 }))}
-              className="input-field text-amber-300 font-bold" required
-            />
-            <p className="text-white/30 text-[11px] mt-1">% готовности</p>
-          </div>
-
-          <div>
-            <label className="label flex items-center justify-between">
-              <span>Цена продажи</span>
-              <Tooltip title="Продажа" content="Цена продажи 1 кг готового переработанного сырья клиентам." />
-            </label>
-            <input
-              type="number" step="0.01" min="0"
-              value={form.selling_price_per_kg || ''}
-              onChange={e => setForm(f => ({ ...f, selling_price_per_kg: parseFloat(e.target.value) || 0 }))}
-              className="input-field text-emerald-400 font-bold" required
-            />
-            <p className="text-white/30 text-[11px] mt-1">{CURRENCY} / кг</p>
-          </div>
-
-          <div>
-            <label className="label flex items-center justify-between">
-              <span>Целевая прибыль</span>
-              <Tooltip title="Цель" content="Желаемая чистая прибыль бизнеса за месяц." />
-            </label>
-            <input
-              type="number" step="500" min="0"
-              value={form.desired_profit || ''}
-              onChange={e => setForm(f => ({ ...f, desired_profit: parseFloat(e.target.value) || 0 }))}
-              className="input-field text-indigo-300 font-bold" required
-            />
-            <p className="text-white/30 text-[11px] mt-1">{CURRENCY} / месяц</p>
-          </div>
-        </div>
 
         <div className="flex justify-end pt-2">
           <button type="submit" disabled={saving} className="btn-primary">
@@ -249,6 +199,71 @@ export default function SettingsPage() {
           </button>
         </div>
       </form>
+
+      {/* 2.5. Производительность и Начальный склад */}
+      <form onSubmit={handleSaveProfile} className="card border border-amber-500/20 space-y-5">
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <span>⚡</span>
+            <span>Производительность и Склад</span>
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="label flex items-center justify-between">
+              <span>Мощность в день (кг)</span>
+              <Tooltip title="Мощность" content="Сколько кг готовой продукции производите за один рабочий день. Используется для прогноза дат выхода в 0 и прибыль." />
+            </label>
+            <input
+              type="number" step="1" min="0"
+              value={form.daily_capacity_kg || ''}
+              onChange={e => setForm(f => ({ ...f, daily_capacity_kg: parseFloat(e.target.value) || 0 }))}
+              className="input-field text-amber-300 font-bold"
+              placeholder="например 50"
+            />
+            <p className="text-white/30 text-[11px] mt-1">кг готовой / день</p>
+          </div>
+
+          <div>
+            <label className="label flex items-center justify-between">
+              <span>Начальный остаток — неготовое (кг)</span>
+              <Tooltip title="Нач. остаток сырья" content="Сколько неготового сырья было на складе ДО начала работы с приложением. Вводится один раз." />
+            </label>
+            <input
+              type="number" step="0.1" min="0"
+              value={form.initial_raw_kg || ''}
+              onChange={e => setForm(f => ({ ...f, initial_raw_kg: parseFloat(e.target.value) || 0 }))}
+              className="input-field text-amber-200 font-bold"
+              placeholder="например 1000"
+            />
+            <p className="text-white/30 text-[11px] mt-1">кг на складе до старта</p>
+          </div>
+
+          <div>
+            <label className="label flex items-center justify-between">
+              <span>Начальный остаток — готовое (кг)</span>
+              <Tooltip title="Нач. остаток готового" content="Сколько готовой продукции было на складе ДО начала работы с приложением. Вводится один раз." />
+            </label>
+            <input
+              type="number" step="0.1" min="0"
+              value={form.initial_finished_kg || ''}
+              onChange={e => setForm(f => ({ ...f, initial_finished_kg: parseFloat(e.target.value) || 0 }))}
+              className="input-field text-emerald-300 font-bold"
+              placeholder="например 200"
+            />
+            <p className="text-white/30 text-[11px] mt-1">кг готового до старта</p>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <button type="submit" disabled={saving} className="btn-primary">
+            <Sparkles className="w-4 h-4" />
+            {saving ? 'Сохранение...' : 'Сохранить настройки производства'}
+          </button>
+        </div>
+      </form>
+
 
       {/* 3. Danger Zone Section */}
       <div className="card border border-rose-500/30 bg-rose-500/5 space-y-4">

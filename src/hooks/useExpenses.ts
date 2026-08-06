@@ -30,7 +30,7 @@ export function useExpenses() {
     return { error: error?.message ?? null }
   }
 
-  const total = expenses.reduce((s, e) => s + e.amount, 0)
+  const total = expenses.reduce((s, e) => s + Number(e.amount), 0)
 
   return { expenses, loading, error, add, remove, refetch: () => refetchAll(true), total }
 }

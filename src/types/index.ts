@@ -3,13 +3,78 @@ export interface Profile {
   id: string
   user_id: string
   business_name: string
-  raw_purchase_price_per_kg: number // Цена закупки исходного сырья (сом/кг), например 2.50
-  yield_percent: number            // Выход готовой продукции (%), например 90.00%
-  selling_price_per_kg: number      // Цена продажи готового сырья (сом/кг), например 6.50
-  desired_profit: number            // Сохраняемая желаемая чистая прибыль (сом), например 10000.00
+  raw_purchase_price_per_kg: number // Цена закупки исходного сырья (сом/кг)
+  yield_percent: number             // Выход готовой продукции (%)
+  selling_price_per_kg: number      // Цена продажи готового сырья (сом/кг)
+  desired_profit: number            // Целевая чистая прибыль (сом)
+  // v2 fields
+  daily_capacity_kg: number         // Производительность в день (кг/день)
+  initial_raw_kg: number            // Начальный остаток неготового сырья
+  initial_finished_kg: number       // Начальный остаток готового сырья
   created_at: string
   updated_at: string
 }
+
+// ─── Дневной журнал производства (v2) ────────────────────────────
+export interface DailyProduction {
+  id: string
+  user_id: string
+  date: string                       // ISO date 'YYYY-MM-DD'
+  raw_kg_used: number                // Загружено неготового сырья (кг)
+  finished_kg_produced: number       // Вышло готового сырья (кг)
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type DailyProductionInsert = Omit<DailyProduction, 'id' | 'user_id' | 'created_at' | 'updated_at'>
+export type DailyProductionUpsert = Omit<DailyProduction, 'id' | 'user_id' | 'created_at' | 'updated_at'>
+
+// ─── Закупки сырья — только для учёта кг на складе (v2) ──────────
+export interface RawMaterialPurchase {
+  id: string
+  user_id: string
+  date: string
+  quantity_kg: number                // Кол-во закупленного сырья (кг)
+  price_per_kg: number               // Цена за кг
+  total_cost: number                 // Итого = quantity_kg × price_per_kg
+  supplier: string | null
+  notes: string | null
+  created_at: string
+}
+
+export type RawMaterialPurchaseInsert = Omit<RawMaterialPurchase, 'id' | 'user_id' | 'total_cost' | 'created_at'>
+
+// ─── Склад — остатки (вычисляется на клиенте) (v2) ──────────────
+export interface WarehouseBalance {
+  raw_kg_balance: number             // Остаток неготового сырья (кг)
+  finished_kg_balance: number        // Остаток готового сырья (кг)
+}
+
+// ─── Темп производства (v2) ──────────────────────────────────────
+export type PaceStatus = 'ahead' | 'on_track' | 'behind' | 'no_data'
+
+export interface ProductionPace {
+  totalProducedThisMonth: number     // Уже произведено в этом месяце (кг)
+  daysWorked: number                 // Количество отработанных дней (смен)
+
+  // Метрики для Точки 0
+  initialDaysToBreakEven: number | null
+  actualDaysToBreakEven: number | null
+  breakEvenDiffDays: number | null
+  breakEvenStatus: PaceStatus
+
+  // Метрики для Целевой прибыли
+  initialDaysToTarget: number | null
+  actualDaysToTarget: number | null
+  targetDiffDays: number | null
+  targetStatus: PaceStatus
+  progressPercent: number            // % от цели месяца (0–100+)
+  realYieldPercent: number | null    // Фактический выход сырья в этом месяце (%)
+  realRawPurchasePrice: number | null // Средневзвешенная стоимость сырья на складе (в этом месяце)
+  actualBreakEvenResult: BreakEvenResult | null // Динамическая Точка 0 на базе реальных данных склада
+}
+
 
 // ─── Доходы (продажи готового сырья) ──────────────────────────────────
 export interface Income {
@@ -28,7 +93,6 @@ export interface Income {
 export type IncomeInsert = Omit<Income, 'id' | 'user_id' | 'total_amount' | 'created_at'>
 
 // ─── Бизнес расходы ─────────────────────────────────────────────
-export type ExpenseType = 'fixed' | 'variable'
 
 export interface Expense {
   id: string
@@ -37,7 +101,6 @@ export interface Expense {
   amount: number                     // сумма (TJS)
   category: string
   description: string | null
-  type?: ExpenseType
   created_at: string
 }
 

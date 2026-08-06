@@ -1,18 +1,19 @@
-import { useState, useEffect } from 'react'
-import { Target, Settings, AlertTriangle, Sparkles, PackageCheck, ShoppingBag, Check } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Target, Settings, AlertTriangle, Sparkles, PackageCheck, ShoppingBag, Check, Zap, CalendarClock, TrendingUp } from 'lucide-react'
 import { useBreakEven } from '../hooks/useBreakEven'
 import Tooltip from '../components/Tooltip'
 import HelpModal from '../components/HelpModal'
 import { formatCurrency, formatKg, CURRENCY } from '../types'
 
 export default function BreakEvenPage() {
-  const { profile, loading, updateProfile, calculate } = useBreakEven()
+  const { profile, loading, updateProfile, calculate, productionPace } = useBreakEven()
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState({
     raw_purchase_price_per_kg: 0,
     yield_percent: 0,
     selling_price_per_kg: 0,
     desired_profit: 0,
+    daily_capacity_kg: 0,
   })
   const [saving, setSaving] = useState(false)
   const [savedSuccess, setSavedSuccess] = useState(false)
@@ -24,11 +25,30 @@ export default function BreakEvenPage() {
         yield_percent: profile.yield_percent ?? 0,
         selling_price_per_kg: profile.selling_price_per_kg ?? 0,
         desired_profit: profile.desired_profit ?? 0,
+        daily_capacity_kg: profile.daily_capacity_kg ?? 0,
       })
     }
   }, [profile])
 
   const result = calculate(editForm.desired_profit)
+
+  const activeResult = useMemo(() => {
+    if (productionPace.actualBreakEvenResult && result) {
+      const margin = productionPace.actualBreakEvenResult.marginPerKg
+      const desired = editForm.desired_profit || 0
+      const targetFinished = (productionPace.actualBreakEvenResult.businessExpenses + desired) / margin
+      const yieldRatio = productionPace.actualBreakEvenResult.yieldPercent / 100
+      
+      return {
+        ...productionPace.actualBreakEvenResult,
+        desiredProfit: desired,
+        targetFinishedKg: targetFinished,
+        targetRawKg: targetFinished / yieldRatio,
+        targetRevenue: targetFinished * productionPace.actualBreakEvenResult.sellingPricePerKg
+      }
+    }
+    return result
+  }, [productionPace.actualBreakEvenResult, result, editForm.desired_profit])
 
   const handleSave = async () => {
     setSaving(true)
@@ -72,6 +92,15 @@ export default function BreakEvenPage() {
                 <Target className="w-3.5 h-3.5" />
                 <span>Калькулятор объёма закупки</span>
               </div>
+              {productionPace.realYieldPercent !== null && profile?.yield_percent && (
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+                  productionPace.realYieldPercent >= profile.yield_percent
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                }`}>
+                  Фактический выход сырья: {productionPace.realYieldPercent.toFixed(1)}%
+                </div>
+              )}
               <HelpModal />
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
@@ -145,9 +174,20 @@ export default function BreakEvenPage() {
                   const val = parseFloat(e.target.value) || 0
                   setEditForm(f => ({ ...f, desired_profit: val }))
                 }}
-                onBlur={handleDesiredProfitBlur}
                 className="input-field text-emerald-400 font-bold" placeholder="например 15000" />
             </div>
+            <div>
+              <label className="label flex items-center justify-between">
+                <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-amber-400" /> Мощность в день (кг)</span>
+                <Tooltip title="Дневная мощность" content="Сколько кг готовой продукции вы производите за один рабочий день. Используется для прогноза сроков." />
+              </label>
+              <input type="number" step="1" min="0"
+                value={editForm.daily_capacity_kg || ''}
+                onChange={e => setEditForm(f => ({ ...f, daily_capacity_kg: parseFloat(e.target.value) || 0 }))}
+                className="input-field text-amber-300 font-bold" placeholder="например 50" />
+              <p className="text-white/30 text-[11px] mt-1">кг готовой продукции / день</p>
+            </div>
+
           </div>
 
           <div className="flex gap-3 justify-end mt-5 border-t border-white/10 pt-4">
@@ -160,11 +200,16 @@ export default function BreakEvenPage() {
       )}
 
       {/* Parameter Overview Cards */}
-      {result && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {activeResult && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 relative">
+          {productionPace.actualBreakEvenResult && (
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider z-10 whitespace-nowrap shadow-glow-emerald">
+              Расчет по факту со склада
+            </div>
+          )}
           <div className="card border border-white/10 text-center">
-            <p className="text-white/40 text-xs font-semibold uppercase tracking-wider mb-1">Закупка исходного</p>
-            <p className="text-2xl font-extrabold text-white">{formatCurrency(result.rawPurchasePricePerKg)}</p>
+            <p className="text-white/40 text-xs font-semibold uppercase tracking-wider mb-1">Закупка сырья</p>
+            <p className="text-2xl font-extrabold text-white">{formatCurrency(activeResult.rawPurchasePricePerKg)}</p>
             <p className="text-white/30 text-[11px] mt-1">за 1 кг исходного</p>
           </div>
           <div className="card border border-white/10 text-center">
@@ -172,7 +217,7 @@ export default function BreakEvenPage() {
               <span>Выход продукции</span>
               <Tooltip title="Выход" content="Процент готового материала после очистки/переработки." />
             </p>
-            <p className="text-2xl font-extrabold text-amber-300">{result.yieldPercent.toFixed(1)}%</p>
+            <p className="text-2xl font-extrabold text-amber-300">{activeResult.yieldPercent.toFixed(1)}%</p>
             <p className="text-white/30 text-[11px] mt-1">усушка / отходы</p>
           </div>
           <div className="card border border-white/10 text-center">
@@ -180,32 +225,121 @@ export default function BreakEvenPage() {
               <span>Реальное сырьё</span>
               <Tooltip title="Реальное сырьё" content="Себестоимость сырья за 1 кг готовой продукции: Закупка (2.50) ÷ Выход (0.90) = 2.78 сом." />
             </p>
-            <p className="text-2xl font-extrabold text-indigo-300">{formatCurrency(result.realRawCostPerKg)}</p>
+            <p className="text-2xl font-extrabold text-indigo-300">{formatCurrency(activeResult.realRawCostPerKg)}</p>
             <p className="text-white/30 text-[11px] mt-1">себестоимость 1 кг готового</p>
           </div>
           <div className="card border border-white/10 text-center">
             <p className="text-white/40 text-xs font-semibold uppercase tracking-wider mb-1">Цена продажи</p>
-            <p className="text-2xl font-extrabold text-emerald-400">{formatCurrency(result.sellingPricePerKg)}</p>
+            <p className="text-2xl font-extrabold text-emerald-400">{formatCurrency(activeResult.sellingPricePerKg)}</p>
             <p className="text-white/30 text-[11px] mt-1">за 1 кг готовой продукции</p>
           </div>
         </div>
       )}
 
+      {!activeResult && !editMode && (
+        <div className="card border border-amber-500/30 text-center py-12 bg-amber-500/5">
+          <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-3 opacity-80" />
+          <h3 className="text-xl font-bold text-white mb-2">Настройте параметры расчета</h3>
+          <p className="text-white/50 max-w-md mx-auto mb-5 text-sm">
+            Чтобы увидеть расчеты точки безубыточности и план производства, нужно указать цены закупки, продажи и процент выхода сырья.
+          </p>
+          <button onClick={() => setEditMode(true)} className="btn-primary mx-auto">
+            <Settings className="w-4 h-4 mr-2" />
+            Открыть настройки
+          </button>
+        </div>
+      )}
+
+    {/* ── Прогноз: Дней до цели ──────────────────────────────────── */}
+      {activeResult && (profile?.daily_capacity_kg ?? 0) > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          
+          {/* Темп Точки 0 */}
+          <div className={`card border text-center ${
+            productionPace.breakEvenStatus === 'ahead' ? 'border-emerald-500/40 bg-emerald-500/5' :
+            productionPace.breakEvenStatus === 'behind' ? 'border-rose-500/40 bg-rose-500/5' :
+            'border-amber-500/30'
+          }`}>
+            <CalendarClock className={`w-5 h-5 mx-auto mb-2 ${
+              productionPace.breakEvenStatus === 'ahead' ? 'text-emerald-400' :
+              productionPace.breakEvenStatus === 'behind' ? 'text-rose-400' : 'text-amber-400'
+            }`} />
+            <p className="text-white/40 text-[10px] uppercase font-semibold mb-1">До Точки 0</p>
+            {productionPace.actualDaysToBreakEven === null ? (
+              <p className="text-white/60 text-sm font-bold">Внесите производство</p>
+            ) : productionPace.actualDaysToBreakEven <= 0 ? (
+              <p className="text-emerald-400 text-2xl font-black mt-2">✓ Достигнуто</p>
+            ) : (
+              <>
+                <p className="text-2xl font-black text-white">{Math.max(0, productionPace.actualDaysToBreakEven).toFixed(1)} дн.</p>
+                <div className="mt-1 flex flex-col text-[11px]">
+                   <span className="text-white/30">Идеальный план: {productionPace.initialDaysToBreakEven?.toFixed(1)} дн.</span>
+                   {productionPace.breakEvenStatus === 'ahead' ? <span className="text-emerald-400 font-bold mt-1">Опережаем на {productionPace.breakEvenDiffDays?.toFixed(1)} дн.</span> :
+                    productionPace.breakEvenStatus === 'behind' ? <span className="text-rose-400 font-bold mt-1">Отстаем на {Math.abs(productionPace.breakEvenDiffDays || 0).toFixed(1)} дн.</span> :
+                    <span className="text-indigo-400 font-bold mt-1">Идем строго по графику</span>}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Темп Цели */}
+          {activeResult.desiredProfit > 0 && (
+            <div className={`card border text-center ${
+              productionPace.targetStatus === 'ahead' ? 'border-emerald-500/40 bg-emerald-500/5' :
+              productionPace.targetStatus === 'behind' ? 'border-rose-500/40 bg-rose-500/5' :
+              'border-emerald-500/30'
+            }`}>
+              <Sparkles className={`w-5 h-5 mx-auto mb-2 ${
+                productionPace.targetStatus === 'ahead' ? 'text-emerald-400' :
+                productionPace.targetStatus === 'behind' ? 'text-rose-400' : 'text-emerald-400'
+              }`} />
+              <p className="text-white/40 text-[10px] uppercase font-semibold mb-1">До Желаемой прибыли</p>
+              {productionPace.actualDaysToTarget === null ? (
+                <p className="text-white/60 text-sm font-bold">Внесите производство</p>
+              ) : productionPace.actualDaysToTarget <= 0 ? (
+                <p className="text-emerald-400 text-2xl font-black mt-2">✓ Достигнуто!</p>
+              ) : (
+                <>
+                  <p className="text-2xl font-black text-white">{Math.max(0, productionPace.actualDaysToTarget).toFixed(1)} дн.</p>
+                  <div className="mt-1 flex flex-col text-[11px]">
+                     <span className="text-white/30">Идеальный план: {productionPace.initialDaysToTarget?.toFixed(1)} дн.</span>
+                     {productionPace.targetStatus === 'ahead' ? <span className="text-emerald-400 font-bold mt-1">Опережаем на {productionPace.targetDiffDays?.toFixed(1)} дн.</span> :
+                      productionPace.targetStatus === 'behind' ? <span className="text-rose-400 font-bold mt-1">Отстаем на {Math.abs(productionPace.targetDiffDays || 0).toFixed(1)} дн.</span> :
+                      <span className="text-indigo-400 font-bold mt-1">Идем строго по графику</span>}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Факт произведено */}
+          <div className="card border border-indigo-500/30 text-center flex flex-col justify-center">
+            <TrendingUp className="w-5 h-5 text-indigo-400 mx-auto mb-2" />
+            <p className="text-white/40 text-[10px] uppercase font-semibold mb-1">Произведено по факту</p>
+            <p className="text-2xl font-black text-indigo-300">{formatKg(productionPace.totalProducedThisMonth)}</p>
+            <p className="text-white/30 text-[11px] mt-1">
+              Отработано смен (дней): <span className="text-white/80 font-bold">{productionPace.daysWorked}</span>
+            </p>
+          </div>
+
+        </div>
+      )}
+
       {/* Margin Warning */}
-      {result && !marginOk && (
+      {activeResult && !marginOk && (
         <div className="flex items-center gap-3 bg-rose-500/10 border border-rose-500/30 rounded-2xl p-5">
           <AlertTriangle className="w-6 h-6 text-rose-400 flex-shrink-0" />
           <div>
             <p className="text-rose-300 font-bold text-sm">Невозможно рассчитать точку безубыточности</p>
             <p className="text-rose-200/70 text-xs mt-0.5">
-              Цена продажи ({formatCurrency(result.sellingPricePerKg)}) меньше или равна реальной себестоимости сырья ({formatCurrency(result.realRawCostPerKg)}). Вы работаете в убыток с каждого кг!
+              Цена продажи ({formatCurrency(activeResult.sellingPricePerKg)}) меньше или равна реальной себестоимости сырья ({formatCurrency(activeResult.realRawCostPerKg)}). Вы работаете в убыток с каждого кг!
             </p>
           </div>
         </div>
       )}
 
       {/* Main Calculation View */}
-      {result && marginOk && (
+      {activeResult && marginOk && (
         <>
           {/* Break-Even vs Target Production Cards */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -218,7 +352,7 @@ export default function BreakEvenPage() {
                   </div>
                   <div>
                     <p className="text-white font-bold text-base">Точка выхода в 0 (Минимум)</p>
-                    <p className="text-amber-300/80 text-xs">Покрывает расходы бизнеса ({formatCurrency(result.businessExpenses)})</p>
+                    <p className="text-amber-300/80 text-xs">Покрывает расходы бизнеса ({formatCurrency(activeResult.businessExpenses)})</p>
                   </div>
                 </div>
               </div>
@@ -229,16 +363,16 @@ export default function BreakEvenPage() {
                     <PackageCheck className="w-3.5 h-3.5 text-amber-400" />
                     <span>Готовой продукции:</span>
                   </div>
-                  <p className="text-2xl sm:text-3xl font-black text-amber-300">{formatKg(result.breakEvenFinishedKg)}</p>
-                  <p className="text-white/40 text-[11px] mt-0.5">Выручка: {formatCurrency(result.breakEvenRevenue)}</p>
+                  <p className="text-2xl sm:text-3xl font-black text-amber-300">{formatKg(activeResult.breakEvenFinishedKg)}</p>
+                  <p className="text-white/40 text-[11px] mt-0.5">Выручка: {formatCurrency(activeResult.breakEvenRevenue)}</p>
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 text-white/50 text-xs font-semibold uppercase mb-1">
                     <ShoppingBag className="w-3.5 h-3.5 text-indigo-400" />
                     <span>ЗАКУПИТЬ сырья:</span>
                   </div>
-                  <p className="text-2xl sm:text-3xl font-black text-indigo-300">{formatKg(result.breakEvenRawKg)}</p>
-                  <p className="text-white/40 text-[11px] mt-0.5">с учётом усушки {result.yieldPercent}%</p>
+                  <p className="text-2xl sm:text-3xl font-black text-indigo-300">{formatKg(activeResult.breakEvenRawKg)}</p>
+                  <p className="text-white/40 text-[11px] mt-0.5">с учётом усушки {activeResult.yieldPercent}%</p>
                 </div>
               </div>
             </div>
@@ -283,16 +417,16 @@ export default function BreakEvenPage() {
                 </div>
               </div>
 
-              {result.desiredProfit > 0 && (
+              {activeResult.desiredProfit > 0 && (
                 <div className="bg-gradient-to-r from-emerald-500/20 to-indigo-500/20 border border-emerald-500/40 rounded-2xl p-4 animate-fade-in grid grid-cols-2 gap-3">
                   <div>
                     <p className="text-white/60 text-[11px] uppercase font-semibold">Произвести готового:</p>
-                    <p className="text-emerald-400 font-extrabold text-2xl tracking-tight">{formatKg(result.targetFinishedKg)}</p>
-                    <p className="text-white/40 text-[11px]">Выручка: {formatCurrency(result.targetRevenue)}</p>
+                    <p className="text-emerald-400 font-extrabold text-2xl tracking-tight">{formatKg(activeResult.targetFinishedKg)}</p>
+                    <p className="text-white/40 text-[11px]">Выручка: {formatCurrency(activeResult.targetRevenue)}</p>
                   </div>
                   <div>
                     <p className="text-white/60 text-[11px] uppercase font-semibold">ЗАКУПИТЬ на складе:</p>
-                    <p className="text-indigo-300 font-extrabold text-2xl tracking-tight">{formatKg(result.targetRawKg)}</p>
+                    <p className="text-indigo-300 font-extrabold text-2xl tracking-tight">{formatKg(activeResult.targetRawKg)}</p>
                     <p className="text-white/40 text-[11px]">Исходного сырья</p>
                   </div>
                 </div>
@@ -312,14 +446,14 @@ export default function BreakEvenPage() {
                   <span>Исходная цена закупки сырья</span>
                   <Tooltip title="Закупка" content="Цена за 1 кг исходного закупленного сырья у поставщика." />
                 </span>
-                <span className="text-white font-medium">{formatCurrency(result.rawPurchasePricePerKg)} / кг</span>
+                <span className="text-white font-medium">{formatCurrency(activeResult.rawPurchasePricePerKg)} / кг</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-white/50 flex items-center gap-1.5">
-                  <span>Реальная себестоимость сырья (с учётом {result.yieldPercent}% выхода)</span>
-                  <Tooltip title="Реальное сырьё" content="2.50 ÷ 0.90 = 2.78 сом за кг готовой очищенной продукции." />
+                  <span>Реальная себестоимость сырья (с учётом {activeResult.yieldPercent}% выхода)</span>
+                  <Tooltip title="Сырьевая себестоимость" content="Цена закупки со склада, разделенная на % выхода. Показывает, сколько РЕАЛЬНО стоит 1 кг готовой продукции только по сырью." />
                 </span>
-                <span className="text-amber-300 font-semibold">{formatCurrency(result.realRawCostPerKg)} / кг</span>
+                <span className="text-amber-300 font-semibold">{formatCurrency(activeResult.realRawCostPerKg)} / кг</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-white/50 flex items-center gap-1.5">
@@ -330,8 +464,8 @@ export default function BreakEvenPage() {
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-white/50 flex items-center gap-1.5">
-                  <span>Доля расходов бизнеса в 1 кг (при целевом объёме)</span>
-                  <Tooltip title="Накладные расходы" content="Все расходы бизнеса (аренда, зп...) раскинутые на проданный/планируемый объем." />
+                  <span>Расходы бизнеса ({formatCurrency(activeResult.businessExpenses)} / {formatKg(activeResult.breakEvenFinishedKg)})</span>
+                  <Tooltip title="Бизнес расходы (Без сырья)" content="Ваши постоянные расходы из вкладки Расходы (аренда, з/п). Сюда НЕ ВХОДИТ стоимость закупки сырья на склад, так как она вычитается отдельно!" />
                 </span>
                 <span className="text-indigo-300 font-medium">{formatCurrency(result.businessExpensePerKg)} / кг</span>
               </div>

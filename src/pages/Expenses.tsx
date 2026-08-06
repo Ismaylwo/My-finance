@@ -12,7 +12,7 @@ export default function ExpensesPage() {
   const [showForm, setShowForm] = useState(false)
   const [isCompact, setIsCompact] = useState(false)
   const [form, setForm] = useState<ExpenseInsert>({
-    date: today(), amount: 0, category: EXPENSE_CATEGORIES[0], description: '', type: 'fixed'
+    date: today(), amount: 0, category: EXPENSE_CATEGORIES[0], description: ''
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -26,7 +26,7 @@ export default function ExpensesPage() {
     if (error) setError(error)
     else {
       setShowForm(false)
-      setForm({ date: today(), amount: 0, category: EXPENSE_CATEGORIES[0], description: '', type: 'fixed' })
+      setForm({ date: today(), amount: 0, category: EXPENSE_CATEGORIES[0], description: '' })
     }
     setSaving(false)
   }

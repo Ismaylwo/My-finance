@@ -30,7 +30,7 @@ export function usePersonal() {
     return { error: error?.message ?? null }
   }
 
-  const total = items.reduce((s, i) => s + i.amount, 0)
+  const total = items.reduce((s, i) => s + Number(i.amount), 0)
 
   return { items, loading, error, add, remove, refetch: () => refetchAll(true), total }
 }

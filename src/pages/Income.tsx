@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, Trash2, TrendingUp, Sparkles, CheckCircle2, Clock } from 'lucide-react'
 import { useIncome } from '../hooks/useIncome'
+import { useAppContext } from '../hooks/useAppContext'
 import StatCard from '../components/StatCard'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency, formatDate, formatKg, CURRENCY } from '../types'
@@ -10,6 +11,7 @@ const today = () => new Date().toISOString().split('T')[0]
 
 export default function IncomePage() {
   const { incomes, loading, add, remove, togglePaid, totalAmount, totalKg, totalUnpaid } = useIncome()
+  const { warehouseBalance } = useAppContext()
   const [showForm, setShowForm] = useState(false)
   const [isCompact, setIsCompact] = useState(false)
   const [form, setForm] = useState<IncomeInsert>({
@@ -27,6 +29,12 @@ export default function IncomePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (form.quantity_kg > Math.max(0, warehouseBalance.finished_kg_balance)) {
+      setError(`На складе недостаточно готовой продукции. Доступно: ${formatKg(Math.max(0, warehouseBalance.finished_kg_balance))}`)
+      return
+    }
+
     setError(null)
     setSaving(true)
     const { error } = await add(form)

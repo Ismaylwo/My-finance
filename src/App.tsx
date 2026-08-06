@@ -11,6 +11,7 @@ import PersonalPage from './pages/Personal'
 import BreakEvenPage from './pages/BreakEven'
 import AnalyticsPage from './pages/Analytics'
 import SettingsPage from './pages/Settings'
+import WarehousePage from './pages/Warehouse'
 
 function AppRoutes() {
   return (
@@ -29,6 +30,7 @@ function AppRoutes() {
                   <Route path="/personal"   element={<PersonalPage />} />
                   <Route path="/breakeven"  element={<BreakEvenPage />} />
                   <Route path="/analytics"  element={<AnalyticsPage />} />
+                  <Route path="/warehouse"  element={<WarehousePage />} />
                   <Route path="/settings"   element={<SettingsPage />} />
                   <Route path="*"           element={<Navigate to="/" replace />} />
                 </Routes>
@@ -46,7 +48,7 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={auth}>
-      <BrowserRouter basename="/My-finance">
+      <BrowserRouter basename="/Finance-2.0">
         <AppRoutes />
       </BrowserRouter>
     </AuthContext.Provider>

@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/My-finance/',
+  base: '/Finance-2.0/',
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {

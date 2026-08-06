@@ -5,7 +5,7 @@ import { useBreakEven } from '../hooks/useBreakEven'
 import OnboardingPage from '../pages/Onboarding'
 import {
   LayoutDashboard, TrendingUp, TrendingDown, Home,
-  Target, BarChart2, LogOut, BarChart3, Menu, Sparkles, Settings
+  Target, BarChart2, LogOut, BarChart3, Menu, Sparkles, Settings, Warehouse
 } from 'lucide-react'
 
 const navItems = [
@@ -14,6 +14,7 @@ const navItems = [
   { to: '/expenses',   icon: TrendingDown,    label: 'Расходы'        },
   { to: '/personal',   icon: Home,            label: 'Личные расходы' },
   { to: '/breakeven',  icon: Target,          label: 'Точка 0'        },
+  { to: '/warehouse',  icon: Warehouse,       label: 'Склад'          },
   { to: '/analytics',  icon: BarChart2,       label: 'Аналитика'      },
   { to: '/settings',   icon: Settings,        label: 'Настройки'      },
 ]

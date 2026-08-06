@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { TrendingUp, TrendingDown, Home, DollarSign, RefreshCw, Calendar, Sparkles, Target, Settings, ShoppingBag, PieChart as PieChartIcon } from 'lucide-react'
+import { TrendingUp, TrendingDown, Home, DollarSign, RefreshCw, Calendar, Sparkles, Target, Settings, ShoppingBag, PieChart as PieChartIcon, Gauge, Warehouse } from 'lucide-react'
 import {
   AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis,
   CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend
@@ -9,6 +9,7 @@ import Tooltip from '../components/Tooltip'
 import HelpModal from '../components/HelpModal'
 import { useDashboard } from '../hooks/useDashboard'
 import { useBreakEven } from '../hooks/useBreakEven'
+import { useAppContext } from '../hooks/useAppContext'
 import { formatCurrency, formatKg } from '../types'
 
 const MONTH_NAMES: Record<string, string> = {
@@ -31,9 +32,11 @@ export default function Dashboard() {
     refetch
   } = useDashboard()
 
-  const { calculate, loading: breakEvenLoading } = useBreakEven(selectedMonth)
+  const { calculate, productionPace, loading: breakEvenLoading } = useBreakEven(selectedMonth)
+  const { warehouseBalance } = useAppContext()
 
   const breakEven = calculate()
+
 
   const chartData = monthlyData.map(m => ({
     name: monthLabel(m.month),
@@ -184,9 +187,29 @@ export default function Dashboard() {
                   />
                   <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
                 </h2>
-                <p className="text-white/40 text-xs mt-0.5">
-                  Закупка: {formatCurrency(breakEven.rawPurchasePricePerKg)}/кг &bull; Выход: {breakEven.yieldPercent.toFixed(0)}% &bull; Продажа: {formatCurrency(breakEven.sellingPricePerKg)}/кг
-                </p>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <p className="text-white/40 text-xs">
+                    Закупка (План): {formatCurrency(breakEven.rawPurchasePricePerKg)}/кг &bull; Выход (План): {breakEven.yieldPercent.toFixed(0)}% &bull; Продажа: {formatCurrency(breakEven.sellingPricePerKg)}/кг
+                  </p>
+                  {productionPace.realRawPurchasePrice !== null && (
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                      productionPace.realRawPurchasePrice <= breakEven.rawPurchasePricePerKg 
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                    }`}>
+                      Факт. закупка: {formatCurrency(productionPace.realRawPurchasePrice)}/кг
+                    </span>
+                  )}
+                  {productionPace.realYieldPercent !== null && (
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                      productionPace.realYieldPercent >= breakEven.yieldPercent 
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                    }`}>
+                      Факт. выход: {productionPace.realYieldPercent.toFixed(1)}%
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -199,43 +222,86 @@ export default function Dashboard() {
             </NavLink>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
             {/* Target 0 Result Card */}
-            <div className="bg-surface-900/60 p-4 rounded-2xl border border-white/5 hover:border-amber-500/30 transition-all">
-              <p className="text-white/40 text-xs font-semibold uppercase mb-1 flex items-center justify-between">
-                <span>Точка выхода в 0 (Минимум)</span>
-                <Tooltip title="Точка 0" content="Объем продукции для полной компенсации расходов бизнеса за выбранный период." />
+            <div className="bg-surface-900/60 p-4 rounded-2xl border border-white/5 hover:border-amber-500/30 transition-all relative overflow-hidden">
+              <p className="text-white/40 text-[11px] font-semibold uppercase mb-1 flex items-center justify-between">
+                <span>Точка выхода в 0</span>
+                <Tooltip title="Точка 0" content="Объем продукции для полной компенсации расходов бизнеса." />
               </p>
-              <p className="text-2xl font-black text-amber-300">{formatKg(breakEven.breakEvenFinishedKg)}</p>
-              <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
-                <span className="text-white/40 flex items-center gap-1">
-                  <ShoppingBag className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>ЗАКУПИТЬ:</span>
-                </span>
-                <span className="text-indigo-300 font-extrabold">{formatKg(breakEven.breakEvenRawKg)}</span>
-              </div>
+              
+              {productionPace.actualBreakEvenResult ? (
+                <>
+                  <div className="flex items-end gap-2">
+                    <p className="text-2xl font-black text-amber-300">{formatKg(productionPace.actualBreakEvenResult.breakEvenFinishedKg)}</p>
+                    <span className="text-[9px] text-emerald-400/90 border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 rounded uppercase mb-1 whitespace-nowrap">По факту склада</span>
+                  </div>
+                  <p className="text-[10px] text-white/30 mt-0.5">
+                    План (Настройки): {formatKg(breakEven.breakEvenFinishedKg)}
+                  </p>
+                  <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                    <span className="text-white/40 flex items-center gap-1">
+                      <ShoppingBag className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>ЗАКУПИТЬ:</span>
+                    </span>
+                    <span className="text-indigo-300 font-extrabold">{formatKg(productionPace.actualBreakEvenResult.breakEvenRawKg)}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl font-black text-amber-300">{formatKg(breakEven.breakEvenFinishedKg)}</p>
+                  <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                    <span className="text-white/40 flex items-center gap-1">
+                      <ShoppingBag className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>ЗАКУПИТЬ:</span>
+                    </span>
+                    <span className="text-indigo-300 font-extrabold">{formatKg(breakEven.breakEvenRawKg)}</span>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Target Profit Saved Result Card */}
             {breakEven.desiredProfit > 0 ? (
-              <div className="bg-surface-900/60 p-4 rounded-2xl border border-white/5 hover:border-emerald-500/30 transition-all">
-                <p className="text-white/40 text-xs font-semibold uppercase mb-1 flex items-center justify-between">
+              <div className="bg-surface-900/60 p-4 rounded-2xl border border-white/5 hover:border-emerald-500/30 transition-all relative overflow-hidden">
+                <p className="text-white/40 text-[11px] font-semibold uppercase mb-1 flex items-center justify-between">
                   <span>Для прибыли {formatCurrency(breakEven.desiredProfit)}</span>
-                  <Tooltip title="Целевая прибыль" content="Объем закупки сырья на складе для получения сохранённой желаемой прибыли." />
+                  <Tooltip title="Целевая прибыль" content="Объем закупки сырья на складе для получения желаемой прибыли." />
                 </p>
-                <p className="text-2xl font-black text-emerald-400">{formatKg(breakEven.targetFinishedKg)}</p>
-                <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
-                  <span className="text-white/40 flex items-center gap-1">
-                    <ShoppingBag className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>ЗАКУПИТЬ:</span>
-                  </span>
-                  <span className="text-indigo-300 font-extrabold">{formatKg(breakEven.targetRawKg)}</span>
-                </div>
+                
+                {productionPace.actualBreakEvenResult ? (
+                  <>
+                    <div className="flex items-end gap-2">
+                      <p className="text-2xl font-black text-emerald-400">{formatKg(productionPace.actualBreakEvenResult.targetFinishedKg)}</p>
+                    </div>
+                    <p className="text-[10px] text-white/30 mt-0.5">
+                      План (Настройки): {formatKg(breakEven.targetFinishedKg)}
+                    </p>
+                    <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                      <span className="text-white/40 flex items-center gap-1">
+                        <ShoppingBag className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>ЗАКУПИТЬ:</span>
+                      </span>
+                      <span className="text-indigo-300 font-extrabold">{formatKg(productionPace.actualBreakEvenResult.targetRawKg)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-black text-emerald-400">{formatKg(breakEven.targetFinishedKg)}</p>
+                    <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                      <span className="text-white/40 flex items-center gap-1">
+                        <ShoppingBag className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>ЗАКУПИТЬ:</span>
+                      </span>
+                      <span className="text-indigo-300 font-extrabold">{formatKg(breakEven.targetRawKg)}</span>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <NavLink to="/breakeven" className="bg-surface-900/40 p-4 rounded-2xl border border-dashed border-white/10 hover:border-emerald-500/40 transition-all flex flex-col justify-between group">
                 <div>
-                  <p className="text-white/40 text-xs font-semibold uppercase mb-1 flex items-center gap-1">
+                  <p className="text-white/40 text-[11px] font-semibold uppercase mb-1 flex items-center gap-1">
                     <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Цель по прибыли</span>
                   </p>
@@ -249,17 +315,145 @@ export default function Dashboard() {
 
             {/* Unit Net Profit Card */}
             <div className="bg-surface-900/60 p-4 rounded-2xl border border-white/5 hover:border-rose-500/30 transition-all">
-              <p className="text-white/40 text-xs font-semibold uppercase mb-1 flex items-center justify-between">
+              <p className="text-white/40 text-[11px] font-semibold uppercase mb-1 flex items-center justify-between">
                 <span>ПОЛНАЯ себестоимость 1 кг</span>
                 <Tooltip title="Себестоимость" content="Сырьё + Доля всех расходов бизнеса на 1 кг при данном объёме." />
               </p>
-              <p className="text-2xl font-black text-rose-300">{formatCurrency(breakEven.fullCostPerKg)}</p>
+              
+              {productionPace.actualBreakEvenResult ? (
+                <>
+                  <p className="text-2xl font-black text-rose-300">{formatCurrency(productionPace.actualBreakEvenResult.fullCostPerKg)}</p>
+                  <p className="text-[10px] text-white/30 mt-0.5">
+                    План (Настройки): {formatCurrency(breakEven.fullCostPerKg)}
+                  </p>
+                  <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                    <span className="text-white/40">Реальная чистая маржа:</span>
+                    <span className="text-emerald-400 font-extrabold">+{formatCurrency(productionPace.actualBreakEvenResult.netProfitPerKg)}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl font-black text-rose-300">{formatCurrency(breakEven.fullCostPerKg)}</p>
+                  <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                    <span className="text-white/40">Чистая маржа (План):</span>
+                    <span className="text-emerald-400 font-extrabold">+{formatCurrency(breakEven.netProfitPerKg)} / кг</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Cash Recoup Card (Возврат инвестиций) */}
+            <div className="bg-surface-900/60 p-4 rounded-2xl border border-indigo-500/20 hover:border-indigo-500/40 transition-all">
+              <p className="text-white/40 text-[11px] font-semibold uppercase mb-1 flex items-center justify-between">
+                <span className="text-indigo-300">Возврат всех вложений</span>
+                <Tooltip title="Возврат кассы" content="Сколько нужно продать, чтобы вернуть ВСЕ потраченные за месяц деньги (включая сырье на складе)." />
+              </p>
+              
+              <p className="text-2xl font-black text-indigo-400">
+                {formatKg(productionPace.actualBreakEvenResult 
+                  ? (stats.totalExpenses / productionPace.actualBreakEvenResult.sellingPricePerKg)
+                  : (stats.totalExpenses / breakEven.sellingPricePerKg)
+                )}
+              </p>
               <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
-                <span className="text-white/40">Чистая маржа:</span>
-                <span className="text-emerald-400 font-extrabold">+{formatCurrency(breakEven.netProfitPerKg)} / кг</span>
+                <span className="text-white/40">Общие траты (Касса):</span>
+                <span className="text-rose-400 font-extrabold">{formatCurrency(stats.totalExpenses)}</span>
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Charts Grid */}
+      {/* ── Виджет Темп производства + Склад ────────────────────────── */}
+      {(productionPace.breakEvenStatus !== 'no_data' || warehouseBalance.raw_kg_balance > 0 || warehouseBalance.finished_kg_balance > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Темп производства */}
+          {productionPace.breakEvenStatus !== 'no_data' && (
+            <div className="card border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 via-indigo-500/5 to-transparent">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Gauge className="w-5 h-5 text-indigo-400" />
+                  <h2 className="text-sm font-bold text-white">Темп (Точка 0)</h2>
+                </div>
+                <NavLink to="/breakeven" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                  Подробнее →
+                </NavLink>
+              </div>
+
+              {/* Прогресс бар */}
+              <div className="mb-3">
+                <div className="flex justify-between text-xs text-white/50 mb-1">
+                  <span>Произведено: {formatKg(productionPace.totalProducedThisMonth)}</span>
+                  <span className="font-bold text-white/70">{productionPace.progressPercent.toFixed(0)}%</span>
+                </div>
+                <div className="w-full h-2.5 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      productionPace.breakEvenStatus === 'ahead'    ? 'bg-emerald-400' :
+                      productionPace.breakEvenStatus === 'on_track' ? 'bg-indigo-400' : 'bg-rose-400'
+                    }`}
+                    style={{ width: `${Math.min(100, productionPace.progressPercent)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Статус и дни до цели */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-surface-900/60 rounded-xl p-3">
+                  <p className="text-white/40 text-[10px] uppercase font-semibold mb-1">Статус</p>
+                  <p className={`font-bold text-sm ${
+                    productionPace.breakEvenStatus === 'ahead'    ? 'text-emerald-400' :
+                    productionPace.breakEvenStatus === 'on_track' ? 'text-indigo-300' : 'text-rose-400'
+                  }`}>
+                    {productionPace.breakEvenStatus === 'ahead'    ? '🟢 Опережаем' :
+                     productionPace.breakEvenStatus === 'on_track' ? '🟡 По графику' : '🔴 Отстаём'}
+                  </p>
+                  <p className="text-white/30 text-[10px] mt-0.5">
+                    Смен: {productionPace.daysWorked}
+                  </p>
+                </div>
+                <div className="bg-surface-900/60 rounded-xl p-3">
+                  <p className="text-white/40 text-[10px] uppercase font-semibold mb-1">Осталось дней</p>
+                  {productionPace.actualDaysToBreakEven !== null ? (
+                    <>
+                      <p className="font-bold text-sm text-white">{Math.max(0, productionPace.actualDaysToBreakEven).toFixed(1)} дн.</p>
+                      <p className={`text-[10px] mt-0.5 ${productionPace.breakEvenStatus === 'ahead' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {productionPace.actualDaysToBreakEven === 0 ? '✓ Достигнуто!' : `До Точки 0`}
+                      </p>
+                    </>
+                  ) : <p className="font-bold text-sm text-white/50">-</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Остатки склада */}
+          <NavLink to="/warehouse" className="card border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent hover:border-emerald-500/60 transition-all group">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Warehouse className="w-5 h-5 text-emerald-400" />
+                <h2 className="text-sm font-bold text-white">Остатки склада</h2>
+              </div>
+              <span className="text-xs text-emerald-400 group-hover:text-emerald-300 transition-colors">Перейти →</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-surface-900/60 rounded-xl p-3">
+                <p className="text-white/40 text-[10px] uppercase font-semibold mb-1">Неготовое сырьё</p>
+                <p className={`font-black text-xl ${warehouseBalance.raw_kg_balance < 0 ? 'text-rose-400' : 'text-amber-300'}`}>
+                  {formatKg(Math.max(0, warehouseBalance.raw_kg_balance))}
+                </p>
+                <p className="text-white/30 text-[10px] mt-0.5">на складе</p>
+              </div>
+              <div className="bg-surface-900/60 rounded-xl p-3">
+                <p className="text-white/40 text-[10px] uppercase font-semibold mb-1">Готовая продукция</p>
+                <p className={`font-black text-xl ${warehouseBalance.finished_kg_balance < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  {formatKg(Math.max(0, warehouseBalance.finished_kg_balance))}
+                </p>
+                <p className="text-white/30 text-[10px] mt-0.5">к продаже</p>
+              </div>
+            </div>
+          </NavLink>
         </div>
       )}
 
