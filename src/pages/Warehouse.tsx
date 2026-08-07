@@ -8,11 +8,10 @@ import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import { formatKg, formatCurrency, formatDate } from '../types'
 import type { DailyProductionInsert, RawMaterialPurchaseInsert } from '../types'
+import { localDateInputValue } from '../lib/finance'
 
 // ── Helper: сегодняшняя дата в ISO ─────────────────────────────────
-function today() {
-  return new Date().toISOString().split('T')[0]
-}
+const today = localDateInputValue
 
 // ── Статус склада — цвет остатка ──────────────────────────────────
 function StockBadge({ value, label, color }: { value: number; label: string; color: string }) {
@@ -33,7 +32,7 @@ export default function WarehousePage() {
   const { user } = useAuth()
   const {
     profile, warehouseBalance, dailyProduction, rawMaterialPurchases,
-    incomes, setDailyProduction, setRawMaterialPurchases,
+    incomes, setDailyProduction, setRawMaterialPurchases, refetchAll,
   } = useAppContext()
 
   // ── Форма добавления дневного производства ─────────────────────
@@ -86,8 +85,8 @@ export default function WarehousePage() {
     const rawKg = parseFloat(dpForm.raw_kg_used) || 0
     const finishedKg = parseFloat(dpForm.finished_kg_produced) || 0
 
-    if (rawKg <= 0 && finishedKg <= 0) {
-      setDpError('Введите хотя бы одно значение > 0')
+    if (rawKg <= 0 || finishedKg <= 0) {
+      setDpError('Укажите использованное сырьё и полученную готовую продукцию')
       setDpSaving(false); return
     }
 
@@ -123,7 +122,9 @@ export default function WarehousePage() {
   // ── Удалить запись производства ────────────────────────────────
   const handleDpDelete = async (id: string) => {
     setDailyProduction(prev => prev.filter(d => d.id !== id))
-    await supabase.from('daily_production').delete().eq('id', id)
+    const { error } = await supabase.from('daily_production').delete().eq('id', id)
+    if (error) setDpError(error.message)
+    await refetchAll(false)
   }
 
   // ── Сохранить закупку сырья ────────────────────────────────────
@@ -133,15 +134,20 @@ export default function WarehousePage() {
     setRmpSaving(true); setRmpError(null)
 
     const qty = parseFloat(rmpForm.quantity_kg)
+    const price = parseFloat(rmpForm.price_per_kg)
     if (!qty || qty <= 0) {
       setRmpError('Количество кг должно быть > 0')
+      setRmpSaving(false); return
+    }
+    if (!price || price <= 0) {
+      setRmpError('Цена закупки должна быть больше нуля')
       setRmpSaving(false); return
     }
 
     const item: RawMaterialPurchaseInsert = {
       date: rmpForm.date,
       quantity_kg: qty,
-      price_per_kg: parseFloat(rmpForm.price_per_kg) || 0,
+      price_per_kg: price,
       supplier: rmpForm.supplier || null,
       notes: rmpForm.notes || null,
     }
@@ -164,7 +170,9 @@ export default function WarehousePage() {
   // ── Удалить закупку ────────────────────────────────────────────
   const handleRmpDelete = async (id: string) => {
     setRawMaterialPurchases(prev => prev.filter(r => r.id !== id))
-    await supabase.from('raw_material_purchases').delete().eq('id', id)
+    const { error } = await supabase.from('raw_material_purchases').delete().eq('id', id)
+    if (error) setRmpError(error.message)
+    await refetchAll(false)
   }
 
   return (
@@ -303,8 +311,8 @@ export default function WarehousePage() {
               className="input-field text-amber-400 font-bold" />
           </div>
           <div>
-            <label className="label">Цена за кг (сом)</label>
-            <input type="number" step="0.01" min="0" placeholder="напр. 2.50"
+            <label className="label">Цена за кг (сом) *</label>
+            <input type="number" step="0.01" min="0.01" placeholder="напр. 2.50" required
               value={rmpForm.price_per_kg}
               onChange={e => setRmpForm(f => ({ ...f, price_per_kg: e.target.value }))}
               className="input-field" />

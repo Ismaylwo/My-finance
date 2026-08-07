@@ -1,168 +1,143 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
+import {
+  BarChart3,
+  Boxes,
+  ChevronRight,
+  CircleDollarSign,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  ReceiptText,
+  Settings,
+  Target,
+  TrendingUp,
+  UserRound,
+  X,
+} from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useBreakEven } from '../hooks/useBreakEven'
 import OnboardingPage from '../pages/Onboarding'
-import {
-  LayoutDashboard, TrendingUp, TrendingDown, Home,
-  Target, BarChart2, LogOut, BarChart3, Menu, Sparkles, Settings, Warehouse
-} from 'lucide-react'
 
-const navItems = [
-  { to: '/',           icon: LayoutDashboard, label: 'Дэшборд'       },
-  { to: '/income',     icon: TrendingUp,      label: 'Доходы'         },
-  { to: '/expenses',   icon: TrendingDown,    label: 'Расходы'        },
-  { to: '/personal',   icon: Home,            label: 'Личные расходы' },
-  { to: '/breakeven',  icon: Target,          label: 'Точка 0'        },
-  { to: '/warehouse',  icon: Warehouse,       label: 'Склад'          },
-  { to: '/analytics',  icon: BarChart2,       label: 'Аналитика'      },
-  { to: '/settings',   icon: Settings,        label: 'Настройки'      },
+const navGroups = [
+  {
+    label: 'Обзор',
+    items: [
+      { to: '/', icon: LayoutDashboard, label: 'Главная' },
+      { to: '/analytics', icon: BarChart3, label: 'Аналитика' },
+    ],
+  },
+  {
+    label: 'Операции',
+    items: [
+      { to: '/income', icon: TrendingUp, label: 'Продажи' },
+      { to: '/expenses', icon: ReceiptText, label: 'Расходы бизнеса' },
+      { to: '/personal', icon: UserRound, label: 'Личные расходы' },
+      { to: '/warehouse', icon: Boxes, label: 'Склад и производство' },
+    ],
+  },
+  {
+    label: 'Планирование',
+    items: [
+      { to: '/breakeven', icon: Target, label: 'Точка безубыточности' },
+      { to: '/settings', icon: Settings, label: 'Настройки' },
+    ],
+  },
 ]
 
-interface LayoutProps {
-  children: React.ReactNode
-}
-
-export default function Layout({ children }: LayoutProps) {
+export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth()
-  const { profile, loading: profileLoading } = useBreakEven()
+  const { profile, loading } = useBreakEven()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const businessName = profile?.business_name?.trim() ?? ''
 
-  const businessName = profile?.business_name || ''
-  // Бизнес считается настроенным, если у профиля есть непустое название
-  const isBusinessConfigured = Boolean(businessName && businessName.trim().length > 0)
+  if (!loading && !businessName) return <OnboardingPage />
 
-  const handleSignOut = async () => {
+  const logout = async () => {
     await signOut()
     navigate('/login')
   }
 
-  const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : 'U'
-
-  // Показываем Onboarding ТОЛЬКО если данные уже загружены И профиля нет/название пустое
-  // profileLoading = true означает что данные ещё в пути — не трогаем экран
-  if (!profileLoading && !isBusinessConfigured) {
-    return <OnboardingPage />
-  }
-
-  const SidebarContent = () => (
+  const Sidebar = () => (
     <>
-      {/* Brand Header with Real Business Name */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10 relative overflow-hidden">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-primary-600 flex items-center justify-center flex-shrink-0 shadow-glow-primary">
-          <BarChart3 className="w-5 h-5 text-white" />
+      <div className="flex h-[76px] items-center gap-3 border-b border-white/7 px-5">
+        <div className="brand-mark"><CircleDollarSign className="h-5 w-5" /></div>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-extrabold text-white">{businessName || 'Мой бизнес'}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-sky-400/75">Business control</p>
         </div>
-        <div className="overflow-hidden">
-          <div className="flex items-center gap-1.5">
-            <h1 className="font-extrabold text-sm text-white tracking-tight truncate">{businessName}</h1>
-            <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse flex-shrink-0" />
-          </div>
-          <p className="text-[11px] text-indigo-300/60 font-medium">Финансовая аналитика TJS</p>
-        </div>
+        <button className="ml-auto rounded-lg p-2 text-white/45 hover:bg-white/5 lg:hidden" onClick={() => setSidebarOpen(false)}>
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-5 space-y-1.5 overflow-y-auto">
-        <p className="px-3 text-[10px] font-bold text-white/30 uppercase tracking-widest mb-2">Навигация</p>
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            onClick={() => setSidebarOpen(false)}
-            className={({ isActive }: { isActive: boolean }) =>
-              `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 group relative ${
-                isActive
-                  ? 'bg-gradient-to-r from-primary-600/30 to-indigo-600/20 text-white border border-primary-500/40 shadow-glow-primary'
-                  : 'text-white/60 hover:text-white hover:bg-white/5 hover:border-white/10 border border-transparent'
-              }`
-            }
-          >
-            {({ isActive }: { isActive: boolean }) => (
-              <>
-                <div className={`p-1.5 rounded-lg transition-colors ${
-                  isActive ? 'bg-primary-500/30 text-primary-300' : 'text-white/40 group-hover:text-white/80'
-                }`}>
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                </div>
-                <span className="truncate">{label}</span>
-                {isActive && (
-                  <span className="ml-auto w-1.5 h-4 rounded-full bg-primary-400 shadow-glow-primary" />
-                )}
-              </>
-            )}
-          </NavLink>
+      <nav className="flex-1 overflow-y-auto px-3 py-5">
+        {navGroups.map(group => (
+          <div key={group.label} className="mb-6 last:mb-0">
+            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[.14em] text-white/25">{group.label}</p>
+            <div className="space-y-1">
+              {group.items.map(({ to, icon: Icon, label }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  onClick={() => setSidebarOpen(false)}
+                  className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon className="h-[18px] w-[18px]" />
+                      <span>{label}</span>
+                      {isActive && <ChevronRight className="ml-auto h-3.5 w-3.5" />}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
-      {/* User profile & Logout footer */}
-      <div className="p-3 border-t border-white/10 bg-surface-900/40 space-y-2">
-        <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-white/5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-indigo-500 flex items-center justify-center font-bold text-sm text-white shadow-sm flex-shrink-0">
-            {userInitial}
+      <div className="border-t border-white/7 p-3">
+        <div className="mb-2 flex items-center gap-3 rounded-xl border border-white/6 bg-white/[0.025] p-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-400/[.12] text-xs font-bold text-sky-300">
+            {user?.email?.charAt(0).toUpperCase() || 'U'}
           </div>
-          <div className="overflow-hidden flex-1">
-            <p className="text-xs font-semibold text-white/90 truncate">{user?.email}</p>
-            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> В сети
-            </span>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-white/78">{user?.email}</p>
+            <p className="mt-0.5 flex items-center gap-1.5 text-[10px] text-white/30"><i className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Данные синхронизированы</p>
           </div>
         </div>
-
-        <button
-          onClick={handleSignOut}
-          className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-300/80 hover:text-white hover:bg-rose-500/20 border border-rose-500/20 hover:border-rose-500/40 transition-all duration-200 w-full"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          Выйти из системы
+        <button onClick={logout} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold text-white/[.38] transition hover:bg-rose-400/[.08] hover:text-rose-300">
+          <LogOut className="h-4 w-4" /> Выйти из аккаунта
         </button>
       </div>
     </>
   )
 
   return (
-    <div className="flex h-screen overflow-hidden font-sans">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 glass border-r border-white/10 flex-shrink-0 z-20">
-        <SidebarContent />
-      </aside>
+    <div className="app-shell">
+      <aside className="sidebar hidden lg:flex"><Sidebar /></aside>
 
-      {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-md transition-opacity" onClick={() => setSidebarOpen(false)} />
-          <aside className="relative flex flex-col w-64 glass border-r border-white/10 z-10 animate-slide-in">
-            <SidebarContent />
-          </aside>
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          <button className="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} aria-label="Закрыть меню" />
+          <aside className="sidebar relative flex animate-slide-in"><Sidebar /></aside>
         </div>
       )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden relative">
-        {/* Mobile Header */}
-        <header className="lg:hidden flex items-center justify-between px-4 py-3 glass border-b border-white/10 z-30">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded-xl glass hover:bg-white/10 transition-colors text-white/70"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-2 overflow-hidden">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-primary-600 flex items-center justify-center flex-shrink-0">
-                <BarChart3 className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-extrabold text-sm text-white truncate">{businessName}</span>
-            </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="mobile-header lg:hidden">
+          <button className="icon-action" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню"><Menu className="h-5 w-5" /></button>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="brand-mark h-8 w-8"><CircleDollarSign className="h-4 w-4" /></div>
+            <strong className="truncate text-sm">{businessName}</strong>
           </div>
+          <div className="h-9 w-9" />
         </header>
-
-        {/* Page View Container */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto animate-fade-in space-y-6">
-            {children}
-          </div>
+        <main className="main-scroll">
+          <div className="mx-auto w-full max-w-[1440px] animate-fade-in px-4 py-5 sm:px-6 lg:px-8 lg:py-7">{children}</div>
         </main>
       </div>
     </div>

@@ -14,6 +14,7 @@ export default function BreakEvenPage() {
     selling_price_per_kg: 0,
     desired_profit: 0,
     daily_capacity_kg: 0,
+    variable_cost_per_kg: 0,
   })
   const [saving, setSaving] = useState(false)
   const [savedSuccess, setSavedSuccess] = useState(false)
@@ -26,6 +27,7 @@ export default function BreakEvenPage() {
         selling_price_per_kg: profile.selling_price_per_kg ?? 0,
         desired_profit: profile.desired_profit ?? 0,
         daily_capacity_kg: profile.daily_capacity_kg ?? 0,
+        variable_cost_per_kg: profile.variable_cost_per_kg ?? 0,
       })
     }
   }, [profile])
@@ -178,6 +180,16 @@ export default function BreakEvenPage() {
             </div>
             <div>
               <label className="label flex items-center justify-between">
+                <span>Переменные затраты (сом/кг)</span>
+                <Tooltip title="Переменные затраты" content="Упаковка, сдельная работа и другие затраты на каждый килограмм. Стоимость сырья сюда не включайте." />
+              </label>
+              <input type="number" step="0.01" min="0"
+                value={editForm.variable_cost_per_kg || ''}
+                onChange={e => setEditForm(f => ({ ...f, variable_cost_per_kg: parseFloat(e.target.value) || 0 }))}
+                className="input-field text-amber-300 font-bold" placeholder="например 0.50" />
+            </div>
+            <div>
+              <label className="label flex items-center justify-between">
                 <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-amber-400" /> Мощность в день (кг)</span>
                 <Tooltip title="Дневная мощность" content="Сколько кг готовой продукции вы производите за один рабочий день. Используется для прогноза сроков." />
               </label>
@@ -315,8 +327,9 @@ export default function BreakEvenPage() {
           {/* Факт произведено */}
           <div className="card border border-indigo-500/30 text-center flex flex-col justify-center">
             <TrendingUp className="w-5 h-5 text-indigo-400 mx-auto mb-2" />
-            <p className="text-white/40 text-[10px] uppercase font-semibold mb-1">Произведено по факту</p>
-            <p className="text-2xl font-black text-indigo-300">{formatKg(productionPace.totalProducedThisMonth)}</p>
+            <p className="text-white/40 text-[10px] uppercase font-semibold mb-1">Продано / произведено</p>
+            <p className="text-2xl font-black text-indigo-300">{formatKg(productionPace.totalSoldThisMonth)}</p>
+            <p className="text-white/30 text-[11px] mt-1">произведено: {formatKg(productionPace.totalProducedThisMonth)}</p>
             <p className="text-white/30 text-[11px] mt-1">
               Отработано смен (дней): <span className="text-white/80 font-bold">{productionPace.daysWorked}</span>
             </p>
@@ -457,8 +470,15 @@ export default function BreakEvenPage() {
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-white/50 flex items-center gap-1.5">
-                  <span>Сырьевая маржа (Цена продажи − Сырьё)</span>
-                  <Tooltip title="Сырьевая маржа" content="6.50 - 2.78 = 3.72 сом с каждого кг на покрытие расходов бизнеса." />
+                  <span>Переменные затраты помимо сырья</span>
+                  <Tooltip title="Переменные затраты" content="Упаковка, сдельная работа и другие затраты на каждый произведённый килограмм." />
+                </span>
+                <span className="text-amber-300 font-semibold">{formatCurrency(activeResult.variableCostPerKg)} / кг</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-white/50 flex items-center gap-1.5">
+                  <span>Маржинальный доход (Цена − Сырьё − Переменные)</span>
+                  <Tooltip title="Маржинальный доход" content="Сумма с каждого проданного килограмма, которая покрывает постоянные расходы и формирует прибыль." />
                 </span>
                 <span className="text-emerald-400 font-semibold">{formatCurrency(result.marginPerKg)} / кг</span>
               </div>
@@ -471,8 +491,8 @@ export default function BreakEvenPage() {
               </div>
               <div className="flex justify-between items-center py-2.5 border-b border-white/5 bg-white/[0.03] px-4 rounded-xl">
                 <span className="text-white/80 font-bold flex items-center gap-1.5">
-                  <span>ПОЛНАЯ себестоимость 1 кг (Сырьё + Расходы бизнеса)</span>
-                  <Tooltip title="ПОЛНАЯ себестоимость" content="Сырьё (2.78) + Доля всех расходов бизнеса на 1 кг." />
+                  <span>ПОЛНАЯ себестоимость 1 кг</span>
+                  <Tooltip title="Полная себестоимость" content="Сырьё + переменные расходы на кг + доля постоянных расходов." />
                 </span>
                 <span className="text-rose-400 font-black text-base">{formatCurrency(result.fullCostPerKg)} / кг</span>
               </div>

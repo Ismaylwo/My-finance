@@ -1,16 +1,20 @@
 import { useState } from 'react'
-import { Plus, Trash2, TrendingUp, Sparkles, CheckCircle2, Clock } from 'lucide-react'
+import { Plus, Trash2, TrendingUp, Sparkles, CheckCircle2, Clock, WalletCards, X } from 'lucide-react'
 import { useIncome } from '../hooks/useIncome'
 import { useAppContext } from '../hooks/useAppContext'
 import StatCard from '../components/StatCard'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency, formatDate, formatKg, CURRENCY } from '../types'
 import type { IncomeInsert } from '../types'
+import { localDateInputValue } from '../lib/finance'
 
-const today = () => new Date().toISOString().split('T')[0]
+const today = localDateInputValue
 
 export default function IncomePage() {
-  const { incomes, loading, add, remove, togglePaid, totalAmount, totalKg, totalUnpaid } = useIncome()
+  const {
+    incomes, paymentsAvailable, loading, add, addPayment, remove, togglePaid,
+    paidForIncome, outstandingForIncome, totalAmount, totalKg, totalUnpaid,
+  } = useIncome()
   const { warehouseBalance } = useAppContext()
   const [showForm, setShowForm] = useState(false)
   const [isCompact, setIsCompact] = useState(false)
@@ -26,6 +30,10 @@ export default function IncomePage() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [paymentSaleId, setPaymentSaleId] = useState<string | null>(null)
+  const [paymentAmount, setPaymentAmount] = useState(0)
+  const [paymentDate, setPaymentDate] = useState(today())
+  const [paymentSaving, setPaymentSaving] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,14 +63,38 @@ export default function IncomePage() {
 
   const handleDelete = async (id: string) => {
     setDeleting(id)
-    await remove(id)
+    const result = await remove(id)
+    if (result.error) setError(result.error)
     setDeleting(null)
   }
 
   const handleTogglePaid = async (id: string, currentStatus: boolean) => {
     setToggling(id)
-    await togglePaid(id, !currentStatus)
+    const result = await togglePaid(id, !currentStatus)
+    if (result.error) setError(result.error)
     setToggling(null)
+  }
+
+  const openPayment = (id: string) => {
+    setPaymentSaleId(id)
+    setPaymentAmount(outstandingForIncome(id))
+    setPaymentDate(today())
+    setError(null)
+  }
+
+  const handlePayment = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!paymentSaleId || paymentAmount <= 0) return
+    setPaymentSaving(true)
+    const result = await addPayment({
+      income_id: paymentSaleId,
+      date: paymentDate,
+      amount: paymentAmount,
+      notes: 'Оплата от клиента',
+    })
+    setPaymentSaving(false)
+    if (result.error) setError(result.error)
+    else setPaymentSaleId(null)
   }
 
   return (
@@ -118,6 +150,28 @@ export default function IncomePage() {
         </div>
       </div>
 
+      {!paymentsAvailable && (
+        <div className="notice notice-warning">
+          <Clock className="h-5 w-5 shrink-0" />
+          <div><p className="font-semibold text-white">Полная схема ещё не установлена в базе</p><p>Для новой Supabase выполните файл supabase/FULL_SETUP_NEW_PROJECT.sql.</p></div>
+        </div>
+      )}
+
+      {paymentSaleId && (
+        <div className="card border border-sky-400/20 animate-slide-in">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 font-bold text-white"><WalletCards className="h-5 w-5 text-sky-400" /> Внести оплату</h2>
+            <button onClick={() => setPaymentSaleId(null)} className="text-white/35 hover:text-white"><X className="h-4 w-4" /></button>
+          </div>
+          <form onSubmit={handlePayment} className="grid gap-4 sm:grid-cols-3">
+            <div><label className="label">Дата оплаты</label><input type="date" min={incomes.find(item => item.id === paymentSaleId)?.date} max={today()} value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="input-field" required /></div>
+            <div><label className="label">Сумма оплаты</label><input type="number" min="0.01" step="0.01" max={outstandingForIncome(paymentSaleId)} value={paymentAmount || ''} onChange={e => setPaymentAmount(parseFloat(e.target.value) || 0)} className="input-field" required /></div>
+            <div className="flex items-end"><button className="btn-primary w-full justify-center" disabled={paymentSaving}>{paymentSaving ? 'Сохраняю…' : 'Записать оплату'}</button></div>
+          </form>
+          <p className="mt-2 text-xs text-white/35">Остаток долга: {formatCurrency(outstandingForIncome(paymentSaleId))}</p>
+        </div>
+      )}
+
       {/* Form */}
       {showForm && (
         <div className="card border border-emerald-500/30 shadow-glow-emerald animate-slide-in">
@@ -130,7 +184,7 @@ export default function IncomePage() {
               <label className="label">Дата</label>
               <input type="date" value={form.date}
                 onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                className="input-field" required />
+                className="input-field" max={today()} required />
             </div>
             <div>
               <label className="label">Количество (кг)</label>
@@ -277,16 +331,17 @@ export default function IncomePage() {
                         <div className="flex items-center gap-2">
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
                             <Clock className="w-3.5 h-3.5 text-amber-400" />
-                            <span>В долг</span>
+                            <span>Долг {formatCurrency(outstandingForIncome(inc.id))}</span>
                           </span>
+                          {paidForIncome(inc.id) > 0 && <span className="text-[10px] text-emerald-400">получено {formatCurrency(paidForIncome(inc.id))}</span>}
                           <button
-                            onClick={() => handleTogglePaid(inc.id, inc.is_paid)}
-                            disabled={toggling === inc.id}
-                            className="glass text-[11px] font-bold px-2.5 py-1 rounded-lg text-emerald-300 hover:bg-emerald-500/20 hover:text-white transition-all border border-emerald-500/30"
-                            title="Нажмите если долг погашен"
+                            onClick={() => openPayment(inc.id)}
+                            className="glass text-[11px] font-bold px-2.5 py-1 rounded-lg text-sky-300 hover:bg-sky-500/20 hover:text-white transition-all border border-sky-500/30"
                           >
-                            ✓ Оплачено?
+                            + Оплата
                           </button>
+                          <button onClick={() => handleTogglePaid(inc.id, inc.is_paid)} disabled={toggling === inc.id}
+                            className="text-[10px] font-semibold text-emerald-400 hover:text-emerald-300" title="Погасить весь остаток">Всё</button>
                         </div>
                       )}
                     </td>

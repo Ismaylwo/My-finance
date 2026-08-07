@@ -1,4 +1,4 @@
-import type { LucideIcon } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, type LucideIcon } from 'lucide-react'
 import { formatCurrency } from '../types'
 
 interface StatCardProps {
@@ -12,65 +12,65 @@ interface StatCardProps {
   suffix?: string
 }
 
-const variantStyles: Record<StatCardProps['variant'], string> = {
-  income:   'stat-income',
-  expense:  'stat-expense',
-  profit:   'stat-profit',
-  personal: 'stat-personal',
-  neutral:  'glass border border-white/10',
-}
-
-const iconContainers: Record<StatCardProps['variant'], string> = {
-  income:   'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-glow-emerald',
-  expense:  'bg-rose-500/15 border border-rose-500/30 text-rose-400 shadow-glow-rose',
-  profit:   'bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 shadow-glow-primary',
-  personal: 'bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-glow-amber',
-  neutral:  'bg-white/10 border border-white/15 text-white/70',
-}
-
-const valueColors: Record<StatCardProps['variant'], string> = {
-  income:   'text-emerald-400',
-  expense:  'text-rose-400',
-  profit:   'text-gradient',
-  personal: 'text-amber-400',
-  neutral:  'text-white',
-}
+const styles = {
+  income: {
+    card: 'stat-income',
+    icon: 'border-emerald-400/15 bg-emerald-400/10 text-emerald-400',
+    value: 'text-emerald-400',
+  },
+  expense: {
+    card: 'stat-expense',
+    icon: 'border-rose-400/15 bg-rose-400/10 text-rose-400',
+    value: 'text-rose-400',
+  },
+  profit: {
+    card: 'stat-profit',
+    icon: 'border-sky-400/15 bg-sky-400/10 text-sky-400',
+    value: 'text-sky-300',
+  },
+  personal: {
+    card: 'stat-personal',
+    icon: 'border-amber-400/15 bg-amber-400/10 text-amber-400',
+    value: 'text-amber-300',
+  },
+  neutral: {
+    card: 'border-white/[.075] bg-white/[.025]',
+    icon: 'border-white/10 bg-white/[.045] text-white/60',
+    value: 'text-white',
+  },
+} satisfies Record<StatCardProps['variant'], { card: string; icon: string; value: string }>
 
 export default function StatCard({
-  title, value, icon: Icon, variant, subtitle, trend, isCurrency = true, suffix = ''
+  title,
+  value,
+  icon: Icon,
+  variant,
+  subtitle,
+  trend,
+  isCurrency = true,
+  suffix = '',
 }: StatCardProps) {
+  const style = styles[variant]
+  const positiveTrend = trend !== undefined && trend >= 0
+  const TrendIcon = positiveTrend ? ArrowUpRight : ArrowDownRight
+
   return (
-    <div className={`rounded-2xl p-5 ${variantStyles[variant]} transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl relative group z-10 hover:z-20`}>
-      {/* Decorative background glow circle */}
-      <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-white/5 blur-2xl group-hover:scale-150 transition-transform duration-500" />
-      
-      <div className="flex items-start justify-between mb-3 relative z-10">
-        <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${iconContainers[variant]} transition-transform duration-300 group-hover:scale-110`}>
-          <Icon className="w-5 h-5" />
+    <article className={`relative min-w-0 overflow-hidden rounded-2xl border p-4 sm:p-5 ${style.card}`}>
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div className={`flex h-9 w-9 items-center justify-center rounded-xl border ${style.icon}`}>
+          <Icon className="h-[17px] w-[17px]" />
         </div>
-        {trend !== undefined && (
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border backdrop-blur-sm ${
-            trend >= 0
-              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-              : 'bg-rose-500/15 border-rose-500/30 text-rose-400'
-          }`}>
-            {trend >= 0 ? '↑ +' : '↓ '}{trend.toFixed(1)}%
+        {trend !== undefined && Number.isFinite(trend) && (
+          <span className={`flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${positiveTrend ? 'bg-emerald-400/[.08] text-emerald-400' : 'bg-rose-400/[.08] text-rose-400'}`}>
+            <TrendIcon className="h-3 w-3" /> {Math.abs(trend).toFixed(1)}%
           </span>
         )}
       </div>
-
-      <div className="relative z-10">
-        <p className="text-white/50 text-xs font-semibold uppercase tracking-wider mb-1">{title}</p>
-        <p className={`text-2xl lg:text-3xl font-extrabold ${valueColors[variant]} tracking-tight`}>
-          {isCurrency ? formatCurrency(value) : `${value.toLocaleString('ru-RU')}${suffix}`}
-        </p>
-        {subtitle && (
-          <p className="text-white/40 text-xs mt-2 flex items-center gap-1 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
-            {subtitle}
-          </p>
-        )}
-      </div>
-    </div>
+      <p className="truncate text-[10px] font-bold uppercase tracking-[.11em] text-white/38">{title}</p>
+      <p className={`mt-1 truncate text-xl font-extrabold tabular-nums sm:text-2xl ${style.value}`} title={String(value)}>
+        {isCurrency ? formatCurrency(value) : `${value.toLocaleString('ru-RU')}${suffix}`}
+      </p>
+      {subtitle && <p className="mt-2 truncate text-[11px] text-white/32" title={subtitle}>{subtitle}</p>}
+    </article>
   )
 }

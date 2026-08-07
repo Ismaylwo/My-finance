@@ -1,16 +1,20 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
-import type { Profile, Income, Expense, PersonalExpense, DailyProduction, RawMaterialPurchase, WarehouseBalance } from '../types'
+import type { Profile, Income, IncomePayment, Expense, PersonalExpense, DailyProduction, RawMaterialPurchase, WarehouseBalance } from '../types'
+import { calculateInventoryLedger, type InventoryLedger } from '../lib/finance'
 
 interface AppContextType {
   profile: Profile | null
   incomes: Income[]
+  incomePayments: IncomePayment[]
+  paymentsAvailable: boolean
   expenses: Expense[]
   personalExpenses: PersonalExpense[]
   dailyProduction: DailyProduction[]
   rawMaterialPurchases: RawMaterialPurchase[]
   warehouseBalance: WarehouseBalance
+  inventoryLedger: InventoryLedger
   loading: boolean
   error: string | null
 
@@ -19,10 +23,12 @@ interface AppContextType {
   updateProfile: (updates: Partial<Pick<Profile,
     'business_name' | 'raw_purchase_price_per_kg' | 'yield_percent' |
     'selling_price_per_kg' | 'desired_profit' | 'daily_capacity_kg' |
-    'initial_raw_kg' | 'initial_finished_kg'
+    'initial_raw_kg' | 'initial_finished_kg' | 'initial_raw_cost_per_kg' |
+    'initial_finished_cost_per_kg' | 'variable_cost_per_kg'
   >>) => Promise<void>
   resetEntireBusiness: () => Promise<void>
   setIncomes: React.Dispatch<React.SetStateAction<Income[]>>
+  setIncomePayments: React.Dispatch<React.SetStateAction<IncomePayment[]>>
   setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>
   setPersonalExpenses: React.Dispatch<React.SetStateAction<PersonalExpense[]>>
   setDailyProduction: React.Dispatch<React.SetStateAction<DailyProduction[]>>
@@ -31,6 +37,8 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null)
 
+// The provider and its hook intentionally live together to keep the context contract local.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAppContext() {
   const ctx = useContext(AppContext)
   if (!ctx) throw new Error('useAppContext must be used within AppProvider')
@@ -48,6 +56,9 @@ const DEFAULT_PROFILE: Profile = {
   daily_capacity_kg: 0,
   initial_raw_kg: 0,
   initial_finished_kg: 0,
+  initial_raw_cost_per_kg: 0,
+  initial_finished_cost_per_kg: 0,
+  variable_cost_per_kg: 0,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 }
@@ -57,6 +68,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [incomes, setIncomes] = useState<Income[]>([])
+  const [incomePayments, setIncomePayments] = useState<IncomePayment[]>([])
+  const [paymentsAvailable, setPaymentsAvailable] = useState(false)
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [personalExpenses, setPersonalExpenses] = useState<PersonalExpense[]>([])
   const [dailyProduction, setDailyProduction] = useState<DailyProduction[]>([])
@@ -67,8 +80,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const fetchAll = useCallback(async (showLoading = true) => {
     if (!user) {
-      setProfile(null); setIncomes([]); setExpenses([])
+      setProfile(null); setIncomes([]); setIncomePayments([]); setExpenses([])
       setPersonalExpenses([]); setDailyProduction([]); setRawMaterialPurchases([])
+      setPaymentsAvailable(false)
       setLoading(false)
       return
     }
@@ -77,9 +91,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setError(null)
 
     try {
-      const [profRes, incRes, expRes, perRes, dpRes, rmpRes] = await Promise.all([
+      const [profRes, incRes, payRes, expRes, perRes, dpRes, rmpRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle(),
         supabase.from('income').select('*').eq('user_id', user.id).order('date', { ascending: false }),
+        supabase.from('income_payments').select('*').eq('user_id', user.id).order('date', { ascending: false }),
         supabase.from('expenses').select('*').eq('user_id', user.id).order('date', { ascending: false }),
         supabase.from('personal_expenses').select('*').eq('user_id', user.id).order('date', { ascending: false }),
         supabase.from('daily_production').select('*').eq('user_id', user.id).order('date', { ascending: false }),
@@ -87,16 +102,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ])
 
       if (profRes.error && profRes.error.code !== 'PGRST116') throw profRes.error
+      const dataError = [incRes.error, expRes.error, perRes.error, dpRes.error, rmpRes.error]
+        .find(Boolean)
+      if (dataError) throw dataError
 
       setProfile((profRes.data as Profile) || null)
       setIncomes((incRes.data || []) as Income[])
+      setIncomePayments((payRes.data || []) as IncomePayment[])
+      setPaymentsAvailable(!payRes.error)
       setExpenses((expRes.data || []) as Expense[])
       setPersonalExpenses((perRes.data || []) as PersonalExpense[])
       setDailyProduction((dpRes.data || []) as DailyProduction[])
       setRawMaterialPurchases((rmpRes.data || []) as RawMaterialPurchase[])
-    } catch (err: any) {
-      console.error('Ошибка загрузки данных:', err.message)
-      setError(err.message)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Не удалось загрузить данные'
+      console.error('Ошибка загрузки данных:', message)
+      setError(message)
+      setPaymentsAvailable(false)
     } finally {
       setLoading(false)
     }
@@ -122,10 +144,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [profile, rawMaterialPurchases, dailyProduction, incomes])
 
+  const inventoryLedger = useMemo(() => calculateInventoryLedger({
+    profile,
+    incomes,
+    expenses,
+    rawMaterialPurchases,
+    dailyProduction,
+  }), [profile, incomes, expenses, rawMaterialPurchases, dailyProduction])
+
   const updateProfile = async (updates: Partial<Pick<Profile,
     'business_name' | 'raw_purchase_price_per_kg' | 'yield_percent' |
     'selling_price_per_kg' | 'desired_profit' | 'daily_capacity_kg' |
-    'initial_raw_kg' | 'initial_finished_kg'
+    'initial_raw_kg' | 'initial_finished_kg' | 'initial_raw_cost_per_kg' |
+    'initial_finished_cost_per_kg' | 'variable_cost_per_kg'
   >>) => {
     if (!user) return
     const current = profile || { ...DEFAULT_PROFILE, user_id: user.id }
@@ -142,6 +173,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       daily_capacity_kg: updated.daily_capacity_kg ?? 0,
       initial_raw_kg: updated.initial_raw_kg ?? 0,
       initial_finished_kg: updated.initial_finished_kg ?? 0,
+      initial_raw_cost_per_kg: updated.initial_raw_cost_per_kg ?? 0,
+      initial_finished_cost_per_kg: updated.initial_finished_cost_per_kg ?? 0,
+      variable_cost_per_kg: updated.variable_cost_per_kg ?? 0,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
 
@@ -153,30 +187,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const resetEntireBusiness = async () => {
     if (!user) return
-    await Promise.all([
-      supabase.from('income').delete().eq('user_id', user.id),
-      supabase.from('expenses').delete().eq('user_id', user.id),
-      supabase.from('personal_expenses').delete().eq('user_id', user.id),
-      supabase.from('daily_production').delete().eq('user_id', user.id),
-      supabase.from('raw_material_purchases').delete().eq('user_id', user.id),
-      supabase.from('profiles').delete().eq('user_id', user.id),
-    ])
-    setProfile(null); setIncomes([]); setExpenses([])
-    setPersonalExpenses([]); setDailyProduction([]); setRawMaterialPurchases([])
+    if (paymentsAvailable) {
+      const { error: resetError } = await supabase.rpc('reset_business_data')
+      if (resetError) throw resetError
+    } else {
+      // Compatibility path for a database that has not received v3 yet.
+      const tables = ['income', 'daily_production', 'raw_material_purchases', 'expenses', 'personal_expenses'] as const
+      for (const table of tables) {
+        const { error: deleteError } = await supabase.from(table).delete().eq('user_id', user.id)
+        if (deleteError) throw deleteError
+      }
+    }
+    await fetchAll(false)
   }
 
   const value: AppContextType = {
-    profile, incomes, expenses, personalExpenses,
-    dailyProduction, rawMaterialPurchases, warehouseBalance,
+    profile, incomes, incomePayments, paymentsAvailable, expenses, personalExpenses,
+    dailyProduction, rawMaterialPurchases, warehouseBalance, inventoryLedger,
     loading: authLoading || loading, error,
     refetchAll: fetchAll,
     updateProfile, resetEntireBusiness,
-    setIncomes, setExpenses, setPersonalExpenses,
+    setIncomes, setIncomePayments, setExpenses, setPersonalExpenses,
     setDailyProduction, setRawMaterialPurchases,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
-
-
-

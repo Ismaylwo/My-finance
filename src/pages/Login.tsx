@@ -1,7 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  ArrowRight,
+  BarChart3,
+  Boxes,
+  Check,
+  CircleDollarSign,
+  Eye,
+  EyeOff,
+  LineChart,
+  ShieldCheck,
+} from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
-import { BarChart3, Eye, EyeOff, LogIn, UserPlus, TrendingUp, TrendingDown, Target, Sparkles } from 'lucide-react'
 
 export default function Login() {
   const { signIn, signUp, user } = useAuth()
@@ -12,175 +22,114 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
-  // Автоперенаправление на дашборд когда пользователь авторизован
   useEffect(() => {
-    if (user) {
-      navigate('/', { replace: true })
-    }
+    if (user) navigate('/', { replace: true })
   }, [user, navigate])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const switchMode = (login: boolean) => {
+    setIsLogin(login)
     setError(null)
-    setSuccessMsg(null)
+    setSuccess(null)
+  }
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
     setLoading(true)
+    setError(null)
+    setSuccess(null)
 
     if (isLogin) {
-      const { error } = await signIn(email, password)
-      if (error) setError(error)
+      const result = await signIn(email, password)
+      if (result.error) setError(result.error)
     } else {
-      const res = await signUp(email, password) as { error: string | null; needsEmailConfirmation?: boolean }
-      if (res.error) {
-        setError(res.error)
-      } else if (res.needsEmailConfirmation) {
-        setSuccessMsg('Аккаунт создан! Проверьте почту и подтвердите регистрацию.')
-      } else {
-        setSuccessMsg('Аккаунт создан! Входим...')
-      }
+      const result = await signUp(email, password) as { error: string | null; needsEmailConfirmation?: boolean }
+      if (result.error) setError(result.error)
+      else setSuccess(result.needsEmailConfirmation
+        ? 'Аккаунт создан. Подтвердите регистрацию по ссылке в письме.'
+        : 'Аккаунт создан. Выполняем вход…')
     }
-
     setLoading(false)
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-surface-950">
-      {/* Animated Background Mesh Globs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] bg-primary-600/25 rounded-full blur-[120px] animate-pulse-slow" />
-        <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[120px] animate-pulse-slow" style={{ animationDelay: '2s' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-[100px]" />
-      </div>
-
-      <div className="w-full max-w-md relative z-10 animate-fade-in">
-        {/* Brand Hero */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-600 to-primary-600 mb-4 shadow-glow-primary border border-white/20">
-            <BarChart3 className="w-8 h-8 text-white" />
+    <main className="grid min-h-screen bg-[#080b12] lg:grid-cols-[1.05fr_.95fr]">
+      <section className="relative hidden overflow-hidden border-r border-white/[.07] p-12 lg:flex lg:flex-col lg:justify-between xl:p-16">
+        <div className="absolute -left-40 -top-40 h-[520px] w-[520px] rounded-full bg-sky-500/10 blur-[120px]" />
+        <div className="absolute -bottom-52 right-0 h-[480px] w-[480px] rounded-full bg-emerald-500/[.07] blur-[120px]" />
+        <div className="relative flex items-center gap-3">
+          <div className="brand-mark"><CircleDollarSign className="h-5 w-5" /></div>
+          <div>
+            <p className="font-extrabold text-white">Бизнес Контроль</p>
+            <p className="text-[10px] font-bold uppercase tracking-[.16em] text-sky-400/70">Финансы и производство</p>
           </div>
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <h1 className="text-3xl font-extrabold text-gradient tracking-tight">БизнесДэшборд</h1>
-            <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-          </div>
-          <p className="text-white/50 text-xs font-semibold uppercase tracking-wider">Управление бизнесом &bull; TJS</p>
         </div>
 
-        {/* Feature Pills Preview */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          {[
-            { icon: TrendingUp, label: 'Доходы', color: 'text-emerald-400' },
-            { icon: TrendingDown, label: 'Расходы', color: 'text-rose-400' },
-            { icon: Target, label: 'Точка 0', color: 'text-amber-400' },
-          ].map(({ icon: Icon, label, color }) => (
-            <div key={label} className="glass rounded-2xl p-3 text-center border border-white/10 hover:border-white/20 transition-all">
-              <Icon className={`w-5 h-5 ${color} mx-auto mb-1`} />
-              <p className="text-xs font-semibold text-white/70">{label}</p>
-            </div>
-          ))}
+        <div className="relative max-w-xl">
+          <p className="eyebrow">Управляйте на основе цифр</p>
+          <h1 className="text-4xl font-extrabold leading-[1.12] text-white xl:text-5xl">Весь бизнес.<br /><span className="text-sky-300">В одном понятном отчёте.</span></h1>
+          <p className="mt-5 max-w-lg text-sm leading-7 text-white/45">Контролируйте продажи, задолженности, расходы, склад и точку безубыточности без сложных таблиц.</p>
+          <div className="mt-9 grid grid-cols-3 gap-3">
+            {[
+              { icon: LineChart, label: 'Финансы' },
+              { icon: Boxes, label: 'Склад' },
+              { icon: BarChart3, label: 'Аналитика' },
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="rounded-2xl border border-white/[.07] bg-white/[.025] p-4">
+                <Icon className="h-5 w-5 text-sky-400" />
+                <p className="mt-3 text-xs font-semibold text-white/60">{label}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Auth Card */}
-        <div className="glass rounded-3xl p-8 border border-white/10 shadow-2xl backdrop-blur-2xl">
-          {/* Tab Switcher */}
-          <div className="flex rounded-2xl bg-surface-900/80 p-1 mb-6 border border-white/10">
-            <button
-              onClick={() => { setIsLogin(true); setError(null) }}
-              className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 uppercase tracking-wider ${
-                isLogin
-                  ? 'bg-gradient-to-r from-primary-600 to-indigo-600 text-white shadow-glow-primary'
-                  : 'text-white/40 hover:text-white/80'
-              }`}
-            >
-              Вход
-            </button>
-            <button
-              onClick={() => { setIsLogin(false); setError(null) }}
-              className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 uppercase tracking-wider ${
-                !isLogin
-                  ? 'bg-gradient-to-r from-primary-600 to-indigo-600 text-white shadow-glow-primary'
-                  : 'text-white/40 hover:text-white/80'
-              }`}
-            >
-              Регистрация
-            </button>
+        <div className="relative flex items-center gap-2 text-xs text-white/30"><ShieldCheck className="h-4 w-4 text-emerald-400" /> Данные защищены политиками доступа Supabase</div>
+      </section>
+
+      <section className="flex min-h-screen items-center justify-center p-5 sm:p-8">
+        <div className="w-full max-w-[440px]">
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <div className="brand-mark"><CircleDollarSign className="h-5 w-5" /></div>
+            <div><p className="font-extrabold">Бизнес Контроль</p><p className="text-[10px] uppercase tracking-widest text-sky-400/70">Business control</p></div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="label">Email адрес</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="input-field"
-                placeholder="your@email.com"
-                required
-                autoComplete="email"
-              />
-            </div>
+          <p className="eyebrow">{isLogin ? 'С возвращением' : 'Начало работы'}</p>
+          <h2 className="text-3xl font-extrabold text-white">{isLogin ? 'Войдите в аккаунт' : 'Создайте аккаунт'}</h2>
+          <p className="mt-2 text-sm text-white/40">{isLogin ? 'Продолжите работу с показателями бизнеса.' : 'Настройка займёт меньше двух минут.'}</p>
 
+          <div className="mt-7 grid grid-cols-2 rounded-xl border border-white/[.07] bg-white/[.025] p-1">
+            <button type="button" onClick={() => switchMode(true)} className={`rounded-lg py-2.5 text-xs font-bold transition ${isLogin ? 'bg-white/[.08] text-white' : 'text-white/35 hover:text-white/60'}`}>Вход</button>
+            <button type="button" onClick={() => switchMode(false)} className={`rounded-lg py-2.5 text-xs font-bold transition ${!isLogin ? 'bg-white/[.08] text-white' : 'text-white/35 hover:text-white/60'}`}>Регистрация</button>
+          </div>
+
+          <form onSubmit={submit} className="mt-6 space-y-4">
             <div>
-              <label className="label">Пароль</label>
+              <label className="label" htmlFor="auth-email">Email</label>
+              <input id="auth-email" type="email" value={email} onChange={event => setEmail(event.target.value)} className="input-field h-12" placeholder="name@company.com" required autoComplete="email" />
+            </div>
+            <div>
+              <label className="label" htmlFor="auth-password">Пароль</label>
               <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="input-field pr-12"
-                  placeholder="Минимум 6 символов"
-                  required
-                  minLength={6}
-                  autoComplete={isLogin ? 'current-password' : 'new-password'}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/80 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <input id="auth-password" type={showPassword ? 'text' : 'password'} value={password} onChange={event => setPassword(event.target.value)} className="input-field h-12 pr-12" placeholder="Минимум 6 символов" required minLength={6} autoComplete={isLogin ? 'current-password' : 'new-password'} />
+                <button type="button" onClick={() => setShowPassword(value => !value)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/25 transition hover:text-white/60" aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}>
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
-            {error && (
-              <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-xs font-medium text-rose-300 animate-fade-in">
-                {error}
-              </div>
-            )}
+            {error && <div className="notice border-rose-400/20 bg-rose-400/[.07] text-rose-300">{error}</div>}
+            {success && <div className="notice border-emerald-400/20 bg-emerald-400/[.07] text-emerald-300"><Check className="h-4 w-4 shrink-0" />{success}</div>}
 
-            {successMsg && (
-              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 text-xs font-medium text-emerald-300 animate-fade-in">
-                {successMsg}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary w-full justify-center py-3.5 text-sm font-bold tracking-wide mt-2"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                  </svg>
-                  Загрузка...
-                </span>
-              ) : isLogin ? (
-                <><LogIn className="w-4 h-4" /> Войти в систему</>
-              ) : (
-                <><UserPlus className="w-4 h-4" /> Создать аккаунт</>
-              )}
+            <button type="submit" disabled={loading} className="btn-primary h-12 w-full justify-center">
+              {loading ? 'Пожалуйста, подождите…' : isLogin ? 'Войти' : 'Создать аккаунт'}
+              {!loading && <ArrowRight className="h-4 w-4" />}
             </button>
           </form>
-        </div>
 
-        <p className="text-center text-white/30 text-xs mt-6 font-medium">
-          Business Dashboard v1.0 &bull; Валюта: Сомони (TJS)
-        </p>
-      </div>
-    </div>
+          <p className="mt-6 text-center text-[11px] leading-5 text-white/25">Нажимая кнопку, вы соглашаетесь хранить данные бизнеса в своей защищённой учётной записи.</p>
+        </div>
+      </section>
+    </main>
   )
 }

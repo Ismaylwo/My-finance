@@ -4,9 +4,10 @@ import { usePersonal } from '../hooks/usePersonal'
 import StatCard from '../components/StatCard'
 import { formatCurrency, formatDate, PERSONAL_CATEGORIES, CURRENCY } from '../types'
 import type { PersonalExpenseInsert } from '../types'
+import { localDateInputValue } from '../lib/finance'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
-const today = () => new Date().toISOString().split('T')[0]
+const today = localDateInputValue
 
 const COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f97316']
 
@@ -31,6 +32,13 @@ export default function PersonalPage() {
       setForm({ date: today(), amount: 0, category: PERSONAL_CATEGORIES[0], description: '' })
     }
     setSaving(false)
+  }
+
+  const handleDelete = async (id: string) => {
+    setDeleting(id)
+    const result = await remove(id)
+    if (result.error) setError(result.error)
+    setDeleting(null)
   }
 
   // Данные для пирога по категориям
@@ -85,7 +93,7 @@ export default function PersonalPage() {
               <label className="label">Дата</label>
               <input type="date" value={form.date}
                 onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                className="input-field" required />
+                className="input-field" max={today()} required />
             </div>
             <div>
               <label className="label">Сумма ({CURRENCY})</label>
@@ -183,7 +191,7 @@ export default function PersonalPage() {
                       </td>
                       <td className="px-4 py-4 text-sm text-right font-extrabold text-amber-400">{formatCurrency(item.amount)}</td>
                       <td className="px-4 py-4 text-right">
-                        <button onClick={() => { setDeleting(item.id); remove(item.id).then(() => setDeleting(null)) }}
+                        <button onClick={() => handleDelete(item.id)}
                           disabled={deleting === item.id}
                           className="p-2 rounded-xl text-white/30 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
                           title="Удалить">

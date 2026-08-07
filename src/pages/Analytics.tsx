@@ -13,7 +13,7 @@ const MONTH_NAMES: Record<string, string> = {
 }
 
 export default function AnalyticsPage() {
-  const { monthlyData, loading } = useDashboard()
+  const { monthlyData, stats, loading } = useDashboard()
 
   const chartData = monthlyData.map(m => {
     const [, mm] = m.month.split('-')
@@ -22,7 +22,7 @@ export default function AnalyticsPage() {
       Доходы:    Math.round(m.total_income),
       Расходы:   Math.round(m.total_expenses),
       Личные:    Math.round(m.total_personal),
-      Прибыль:   Math.round(m.net_profit),
+      'Расчётная прибыль': Math.round(m.net_profit),
       'Кг продано': Math.round(m.total_kg_sold * 10) / 10,
     }
   })
@@ -31,6 +31,12 @@ export default function AnalyticsPage() {
   const totalExpenses = monthlyData.reduce((s, m) => s + m.total_expenses, 0)
   const totalProfit   = monthlyData.reduce((s, m) => s + m.net_profit, 0)
   const totalKg       = monthlyData.reduce((s, m) => s + m.total_kg_sold, 0)
+  const totalCogs     = monthlyData.reduce((s, m) => s + m.estimated_cogs, 0)
+  const totalOperating = monthlyData.reduce((s, m) => s + m.recognized_operating_expenses, 0)
+  const totalPaid     = monthlyData.reduce((s, m) => s + m.paid_income, 0)
+  const totalPurchases = monthlyData.reduce((s, m) => s + m.inventory_purchases, 0)
+  const totalPersonal = monthlyData.reduce((s, m) => s + m.total_personal, 0)
+  const totalCashAfterPersonal = monthlyData.reduce((s, m) => s + m.cash_after_personal, 0)
   const bestMonth     = [...monthlyData].sort((a, b) => b.net_profit - a.net_profit)[0]
 
   if (loading) {
@@ -40,6 +46,7 @@ export default function AnalyticsPage() {
           <div key={i} className="glass rounded-2xl h-64 animate-pulse" />
         ))}
       </div>
+
     )
   }
 
@@ -74,8 +81,8 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'Доходы (6 мес.)',   value: totalIncome,   color: 'text-emerald-400', icon: TrendingUp },
-          { label: 'Расходы (6 мес.)',  value: totalExpenses, color: 'text-rose-400',    icon: TrendingDown },
-          { label: 'Прибыль (6 мес.)', value: totalProfit,   color: 'text-gradient',    icon: DollarSign },
+          { label: 'Расчётные расходы (6 мес.)', value: totalExpenses, color: 'text-rose-400', icon: TrendingDown },
+          { label: 'Расчётная прибыль (6 мес.)', value: totalProfit, color: 'text-gradient', icon: DollarSign },
           { label: 'Продано сырья',     value: totalKg,       color: 'text-amber-400',   icon: Package, isCurrency: false, suffix: ' кг' },
         ].map(({ label, value, color, icon: Icon, isCurrency = true, suffix = '' }) => (
           <div key={label} className="glass rounded-2xl p-5 border border-white/10 text-center hover:border-indigo-500/30 transition-all">
@@ -88,6 +95,36 @@ export default function AnalyticsPage() {
             </p>
           </div>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="panel">
+          <p className="eyebrow">Прибыль и убытки · 6 месяцев</p><h2 className="text-base font-bold text-white">P&amp;L</h2>
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex justify-between text-white/50"><span>Выручка</span><b className="text-emerald-400">{formatCurrency(totalIncome)}</b></div>
+            <div className="flex justify-between text-white/50"><span>Себестоимость проданного</span><b className="text-white">{formatCurrency(totalCogs)}</b></div>
+            <div className="flex justify-between text-white/50"><span>Операционные расходы</span><b className="text-white">{formatCurrency(totalOperating)}</b></div>
+            <div className="flex justify-between border-t border-white/10 pt-2 font-bold text-white"><span>Прибыль</span><b className={totalProfit >= 0 ? 'text-sky-300' : 'text-rose-400'}>{formatCurrency(totalProfit)}</b></div>
+          </div>
+        </div>
+        <div className="panel">
+          <p className="eyebrow">Движение денег · 6 месяцев</p><h2 className="text-base font-bold text-white">Cash Flow</h2>
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex justify-between text-white/50"><span>Получено оплат</span><b className="text-emerald-400">{formatCurrency(totalPaid)}</b></div>
+            <div className="flex justify-between text-white/50"><span>Закупки запасов</span><b className="text-white">{formatCurrency(totalPurchases)}</b></div>
+            <div className="flex justify-between text-white/50"><span>Личные изъятия</span><b className="text-white">{formatCurrency(totalPersonal)}</b></div>
+            <div className="flex justify-between border-t border-white/10 pt-2 font-bold text-white"><span>Изменение денег</span><b className={totalCashAfterPersonal >= 0 ? 'text-sky-300' : 'text-rose-400'}>{formatCurrency(totalCashAfterPersonal)}</b></div>
+          </div>
+        </div>
+        <div className="panel">
+          <p className="eyebrow">Текущие остатки</p><h2 className="text-base font-bold text-white">Управленческий баланс</h2>
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex justify-between text-white/50"><span>Долги клиентов</span><b className="text-amber-300">{formatCurrency(stats.totalReceivables)}</b></div>
+            <div className="flex justify-between text-white/50"><span>Сырьё на складе</span><b className="text-white">{formatCurrency(stats.rawInventoryValue)}</b></div>
+            <div className="flex justify-between text-white/50"><span>Готовая продукция</span><b className="text-white">{formatCurrency(stats.finishedInventoryValue)}</b></div>
+            <div className="flex justify-between border-t border-white/10 pt-2 font-bold text-white"><span>Активы без денег</span><b className="text-sky-300">{formatCurrency(stats.totalReceivables + stats.rawInventoryValue + stats.finishedInventoryValue)}</b></div>
+          </div>
+        </div>
       </div>
 
       {/* Best month banner */}
@@ -143,7 +180,7 @@ export default function AnalyticsPage() {
       {/* Profit & Kg */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card border border-white/10">
-          <h2 className="text-lg font-bold text-white mb-4">Динамика чистой прибыли</h2>
+          <h2 className="text-lg font-bold text-white mb-4">Динамика расчётной прибыли</h2>
           <ResponsiveContainer width="100%" height={230}>
             <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
               <defs>
@@ -160,8 +197,8 @@ export default function AnalyticsPage() {
                 {...customTooltipStyle}
                 formatter={(v: unknown) => formatCurrency(Number(v))}
               />
-              <Bar dataKey="Прибыль" fill="url(#gBar)" radius={[6, 6, 0, 0]} />
-              <Line type="monotone" dataKey="Прибыль" stroke="#a5b4fc" strokeWidth={2.5} dot={{ fill: '#a5b4fc', r: 4 }} />
+              <Bar dataKey="Расчётная прибыль" fill="url(#gBar)" radius={[6, 6, 0, 0]} />
+              <Line type="monotone" dataKey="Расчётная прибыль" stroke="#a5b4fc" strokeWidth={2.5} dot={{ fill: '#a5b4fc', r: 4 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -200,9 +237,9 @@ export default function AnalyticsPage() {
               <tr className="border-b border-white/10 bg-white/[0.02]">
                 <th className="px-6 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider">Месяц</th>
                 <th className="px-6 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider text-right">Доходы</th>
-                <th className="px-6 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider text-right">Расходы</th>
+                <th className="px-6 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider text-right">Расчётные расходы</th>
                 <th className="px-6 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider text-right">Личные</th>
-                <th className="px-6 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider text-right">Прибыль</th>
+                <th className="px-6 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider text-right">Расчётная прибыль</th>
                 <th className="px-6 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider text-right">Продано кг</th>
               </tr>
             </thead>

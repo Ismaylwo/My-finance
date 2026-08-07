@@ -21,6 +21,9 @@ export default function SettingsPage() {
     daily_capacity_kg: 0,
     initial_raw_kg: 0,
     initial_finished_kg: 0,
+    initial_raw_cost_per_kg: 0,
+    initial_finished_cost_per_kg: 0,
+    variable_cost_per_kg: 0,
   })
 
   const [saving, setSaving] = useState(false)
@@ -30,6 +33,7 @@ export default function SettingsPage() {
   const [showClearModal, setShowClearModal] = useState(false)
   const [confirmInput, setConfirmInput] = useState('')
   const [clearing, setClearing] = useState(false)
+  const [clearError, setClearError] = useState<string | null>(null)
 
   useEffect(() => {
     if (profile) {
@@ -42,6 +46,9 @@ export default function SettingsPage() {
         daily_capacity_kg: profile.daily_capacity_kg ?? 0,
         initial_raw_kg: profile.initial_raw_kg ?? 0,
         initial_finished_kg: profile.initial_finished_kg ?? 0,
+        initial_raw_cost_per_kg: profile.initial_raw_cost_per_kg ?? 0,
+        initial_finished_cost_per_kg: profile.initial_finished_cost_per_kg ?? 0,
+        variable_cost_per_kg: profile.variable_cost_per_kg ?? 0,
       })
     }
   }, [profile])
@@ -69,13 +76,16 @@ export default function SettingsPage() {
   const handleClearBusinessData = async () => {
     if (confirmInput.trim().toUpperCase() !== 'УДАЛИТЬ' || !user) return
     setClearing(true)
-    
-    // Полное удаление бизнеса из БД и кэша
-    await resetEntireBusiness()
-
-    setClearing(false)
-    setShowClearModal(false)
-    setConfirmInput('')
+    setClearError(null)
+    try {
+      await resetEntireBusiness()
+      setShowClearModal(false)
+      setConfirmInput('')
+    } catch (error) {
+      setClearError(error instanceof Error ? error.message : 'Не удалось очистить данные')
+    } finally {
+      setClearing(false)
+    }
   }
 
   if (loading) {
@@ -209,7 +219,7 @@ export default function SettingsPage() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="label flex items-center justify-between">
               <span>Мощность в день (кг)</span>
@@ -254,6 +264,22 @@ export default function SettingsPage() {
             />
             <p className="text-white/30 text-[11px] mt-1">кг готового до старта</p>
           </div>
+          <div>
+            <label className="label">Стоимость начального сырья (сом/кг)</label>
+            <input type="number" step="0.01" min="0"
+              value={form.initial_raw_cost_per_kg || ''}
+              onChange={e => setForm(f => ({ ...f, initial_raw_cost_per_kg: parseFloat(e.target.value) || 0 }))}
+              className="input-field" placeholder="например 2.50" />
+            <p className="text-white/30 text-[11px] mt-1">нужно, только если начальный остаток сырья больше нуля</p>
+          </div>
+          <div>
+            <label className="label">Стоимость начальной готовой продукции (сом/кг)</label>
+            <input type="number" step="0.01" min="0"
+              value={form.initial_finished_cost_per_kg || ''}
+              onChange={e => setForm(f => ({ ...f, initial_finished_cost_per_kg: parseFloat(e.target.value) || 0 }))}
+              className="input-field" placeholder="например 3.10" />
+            <p className="text-white/30 text-[11px] mt-1">нужно, только если начальный готовый остаток больше нуля</p>
+          </div>
         </div>
 
         <div className="flex justify-end pt-2">
@@ -278,7 +304,7 @@ export default function SettingsPage() {
           <div>
             <p className="text-white font-semibold text-sm">Очистить всю историю продаж и расходов</p>
             <p className="text-white/50 text-xs mt-0.5 max-w-xl">
-              Удаляет все существующие записи о доходах, продажах в долг и расходах бизнеса. Параметры цен и профиль останутся сохранёнными.
+              Удаляет продажи, оплаты, расходы, закупки и производство. Профиль, цены и начальные остатки останутся сохранёнными.
             </p>
           </div>
           <button
@@ -309,7 +335,7 @@ export default function SettingsPage() {
             </div>
 
             <p className="text-xs text-white/80 leading-relaxed">
-              Вы действительно хотите <strong>удалить всю историю продаж, долгов и расходов</strong>? Это действие нельзя будет отменить!
+              Вы действительно хотите <strong>удалить всю историю продаж, оплат, расходов, закупок и производства</strong>? Это действие нельзя будет отменить!
             </p>
 
             <div className="space-y-1.5">
@@ -322,6 +348,8 @@ export default function SettingsPage() {
                 placeholder="УДАЛИТЬ"
               />
             </div>
+
+            {clearError && <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{clearError}</div>}
 
             <div className="flex gap-3 justify-end pt-2">
               <button type="button" onClick={() => setShowClearModal(false)} className="btn-secondary text-xs">

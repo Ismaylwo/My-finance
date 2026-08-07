@@ -30,9 +30,9 @@ export default function OnboardingPage() {
       })
       setSaving(false)
       navigate('/')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Onboarding save error:', err)
-      setError(err?.message || 'Ошибка сохранения. Попробуйте еще раз.')
+      setError(err instanceof Error ? err.message : 'Ошибка сохранения. Попробуйте еще раз.')
       setSaving(false)
     }
   }

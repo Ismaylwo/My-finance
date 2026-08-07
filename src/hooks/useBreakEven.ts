@@ -1,211 +1,187 @@
 import { useCallback, useMemo } from 'react'
 import { useAppContext } from './useAppContext'
-import type { BreakEvenResult, ProductionPace, PaceStatus } from '../types'
+import type { BreakEvenResult, PaceStatus, ProductionPace } from '../types'
+
+interface BreakEvenInputs {
+  rawPurchasePrice: number
+  yieldPercent: number
+  sellingPrice: number
+  variableCostPerKg: number
+  fixedExpenses: number
+  desiredProfit: number
+}
+
+function buildBreakEvenResult({
+  rawPurchasePrice,
+  yieldPercent,
+  sellingPrice,
+  variableCostPerKg,
+  fixedExpenses,
+  desiredProfit,
+}: BreakEvenInputs): BreakEvenResult | null {
+  if (rawPurchasePrice <= 0 || yieldPercent <= 0 || sellingPrice <= 0) return null
+  const yieldRatio = yieldPercent / 100
+  const realRawCostPerKg = rawPurchasePrice / yieldRatio
+  const marginPerKg = sellingPrice - realRawCostPerKg - variableCostPerKg
+  if (marginPerKg <= 0) return null
+
+  const breakEvenFinishedKg = fixedExpenses / marginPerKg
+  const targetFinishedKg = (fixedExpenses + desiredProfit) / marginPerKg
+  const activeKg = targetFinishedKg > 0 ? targetFinishedKg : breakEvenFinishedKg
+  const businessExpensePerKg = activeKg > 0 ? fixedExpenses / activeKg : 0
+  const fullCostPerKg = realRawCostPerKg + variableCostPerKg + businessExpensePerKg
+
+  return {
+    rawPurchasePricePerKg: rawPurchasePrice,
+    yieldPercent,
+    realRawCostPerKg,
+    sellingPricePerKg: sellingPrice,
+    marginPerKg,
+    variableCostPerKg,
+    businessExpenses: fixedExpenses,
+    desiredProfit,
+    breakEvenFinishedKg,
+    breakEvenRawKg: breakEvenFinishedKg / yieldRatio,
+    breakEvenRevenue: breakEvenFinishedKg * sellingPrice,
+    targetFinishedKg,
+    targetRawKg: targetFinishedKg / yieldRatio,
+    targetRevenue: targetFinishedKg * sellingPrice,
+    businessExpensePerKg,
+    fullCostPerKg,
+    netProfitPerKg: sellingPrice - fullCostPerKg,
+  }
+}
 
 export function useBreakEven(selectedMonth?: string) {
   const now = new Date()
-  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const monthKey = selectedMonth || currentMonthStr
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const monthKey = selectedMonth || currentMonth
+  const {
+    profile,
+    expenses,
+    incomes,
+    dailyProduction,
+    rawMaterialPurchases,
+    loading,
+    refetchAll,
+    updateProfile,
+    resetEntireBusiness,
+  } = useAppContext()
 
-  const { profile, expenses, dailyProduction, rawMaterialPurchases, loading, refetchAll, updateProfile, resetEntireBusiness } = useAppContext()
-
-  // Бизнес-расходы за выбранный месяц
-  const businessExpenses = useMemo(() => {
-    const isAll = monthKey === 'all'
-    return expenses
-      .filter(e => isAll || e.date.startsWith(monthKey))
-      .reduce((s, e) => s + (Number(e.amount) || 0), 0)
-  }, [expenses, monthKey])
+  const belongsToPeriod = useCallback(
+    (date: string) => monthKey === 'all' || date.startsWith(monthKey),
+    [monthKey],
+  )
+  const periodExpenses = useMemo(
+    () => expenses.filter(item => belongsToPeriod(item.date)),
+    [expenses, belongsToPeriod],
+  )
+  const businessExpenses = useMemo(
+    () => periodExpenses
+      .filter(item => item.expense_type === 'fixed' || !item.expense_type)
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
+    [periodExpenses],
+  )
+  const variableExpenses = useMemo(
+    () => periodExpenses
+      .filter(item => item.expense_type !== 'fixed')
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
+    [periodExpenses],
+  )
 
   const calculate = useCallback((customDesiredProfit?: number): BreakEvenResult | null => {
     if (!profile) return null
-
-    const rawPurchasePrice = profile.raw_purchase_price_per_kg ?? 0
-    const yieldPct = profile.yield_percent ?? 0
-    const price = profile.selling_price_per_kg ?? 0
-    const desiredProfit = customDesiredProfit !== undefined ? customDesiredProfit : (profile.desired_profit ?? 0)
-
-    if (rawPurchasePrice <= 0 || price <= 0 || yieldPct <= 0) return null
-
-    const yieldRatio = yieldPct / 100
-    const realRawCostPerKg = rawPurchasePrice / yieldRatio
-    const marginPerKg = price - realRawCostPerKg
-    if (marginPerKg <= 0) return null
-
-    const breakEvenFinishedKg = businessExpenses / marginPerKg
-    const breakEvenRawKg      = breakEvenFinishedKg / yieldRatio
-    const breakEvenRevenue    = breakEvenFinishedKg * price
-
-    const targetFinishedKg    = (businessExpenses + desiredProfit) / marginPerKg
-    const targetRawKg         = targetFinishedKg / yieldRatio
-    const targetRevenue       = targetFinishedKg * price
-
-    const activeKg = targetFinishedKg > 0 ? targetFinishedKg : breakEvenFinishedKg
-    const businessExpensePerKg = activeKg > 0 ? businessExpenses / activeKg : 0
-    const fullCostPerKg = realRawCostPerKg + businessExpensePerKg
-    const netProfitPerKg = price - fullCostPerKg
-
-    return {
-      rawPurchasePricePerKg: rawPurchasePrice,
-      yieldPercent: yieldPct,
-      realRawCostPerKg,
-      sellingPricePerKg: price,
-      marginPerKg,
-      businessExpenses,
-      desiredProfit,
-      breakEvenFinishedKg,
-      breakEvenRawKg,
-      breakEvenRevenue,
-      targetFinishedKg,
-      targetRawKg,
-      targetRevenue,
-      businessExpensePerKg,
-      fullCostPerKg,
-      netProfitPerKg,
-    }
+    return buildBreakEvenResult({
+      rawPurchasePrice: Number(profile.raw_purchase_price_per_kg) || 0,
+      yieldPercent: Number(profile.yield_percent) || 0,
+      sellingPrice: Number(profile.selling_price_per_kg) || 0,
+      variableCostPerKg: Number(profile.variable_cost_per_kg) || 0,
+      fixedExpenses: businessExpenses,
+      desiredProfit: customDesiredProfit ?? (Number(profile.desired_profit) || 0),
+    })
   }, [profile, businessExpenses])
 
-  // ── Темп производства — расчёт для текущего месяца ─────────────────
   const productionPace = useMemo((): ProductionPace => {
-    const dailyCapacity = profile?.daily_capacity_kg ?? 0
-    const breakEvenResult = calculate()
-
-    // Текущий месяц
-    const today = new Date()
-
-    // Произведено в текущем месяце (и количество уникальных рабочих дней)
-    const currentMonthPrefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-    
-    const monthProductions = dailyProduction.filter(d => d.date.startsWith(currentMonthPrefix))
-    
-    const totalProducedThisMonth = monthProductions.reduce((s, d) => s + Number(d.finished_kg_produced), 0)
-    const totalRawUsedThisMonth = monthProductions.reduce((s, d) => s + Number(d.raw_kg_used), 0)
-    const realYieldPercent = totalRawUsedThisMonth > 0 ? (totalProducedThisMonth / totalRawUsedThisMonth) * 100 : null
-    
-    // Считаем количество РЕАЛЬНЫХ рабочих дней (по уникальным датам в журнале)
-    const uniqueWorkingDates = new Set(monthProductions.map(d => d.date))
+    const dailyCapacity = Number(profile?.daily_capacity_kg) || 0
+    const planResult = calculate()
+    const productions = dailyProduction.filter(item => belongsToPeriod(item.date))
+    const sales = incomes.filter(item => belongsToPeriod(item.date))
+    const purchases = rawMaterialPurchases.filter(item => belongsToPeriod(item.date))
+    const totalProducedThisMonth = productions.reduce((sum, item) => sum + Number(item.finished_kg_produced), 0)
+    const totalSoldThisMonth = sales.reduce((sum, item) => sum + Number(item.quantity_kg), 0)
+    const totalRawUsed = productions.reduce((sum, item) => sum + Number(item.raw_kg_used), 0)
+    const realYieldPercent = totalRawUsed > 0 ? (totalProducedThisMonth / totalRawUsed) * 100 : null
+    const uniqueWorkingDates = new Set(productions.map(item => item.date))
     const daysWorked = uniqueWorkingDates.size
 
-    // 2. ФАКТИЧЕСКИЕ ДАННЫЕ И ДИНАМИЧЕСКАЯ ТОЧКА 0
-    const monthPurchases = rawMaterialPurchases.filter(p => p.date.startsWith(currentMonthPrefix))
-    const totalPurchasedKg = monthPurchases.reduce((s, p) => s + Number(p.quantity_kg), 0)
-    const totalPurchasedCost = monthPurchases.reduce((s, p) => s + Number(p.total_cost), 0)
-    const realRawPurchasePrice = totalPurchasedKg > 0 ? totalPurchasedCost / totalPurchasedKg : null
+    const purchasedKg = purchases.reduce((sum, item) => sum + Number(item.quantity_kg), 0)
+    const purchasedCost = purchases.reduce((sum, item) => sum + Number(item.total_cost), 0)
+    const realRawPurchasePrice = purchasedKg > 0 ? purchasedCost / purchasedKg : null
+    const productionVariableExpenses = periodExpenses
+      .filter(item => item.expense_type === 'production_variable' || item.expense_type === 'variable')
+      .reduce((sum, item) => sum + Number(item.amount), 0)
+    const sellingVariableExpenses = periodExpenses
+      .filter(item => item.expense_type === 'selling_variable')
+      .reduce((sum, item) => sum + Number(item.amount), 0)
+    const actualVariableCost = productionVariableExpenses > 0 || sellingVariableExpenses > 0
+      ? (totalProducedThisMonth > 0 ? productionVariableExpenses / totalProducedThisMonth : 0)
+        + (totalSoldThisMonth > 0 ? sellingVariableExpenses / totalSoldThisMonth : 0)
+      : Number(profile?.variable_cost_per_kg) || 0
 
-    let actualBreakEvenResult: BreakEvenResult | null = null
-    const price = profile?.selling_price_per_kg ?? 0
-    const desiredProfit = profile?.desired_profit ?? 0
-    const factRawPurchasePrice = realRawPurchasePrice ?? profile?.raw_purchase_price_per_kg ?? 0
-    const factYieldPct = realYieldPercent ?? profile?.yield_percent ?? 0
+    const actualBreakEvenResult = buildBreakEvenResult({
+      rawPurchasePrice: realRawPurchasePrice ?? (Number(profile?.raw_purchase_price_per_kg) || 0),
+      yieldPercent: realYieldPercent ?? (Number(profile?.yield_percent) || 0),
+      sellingPrice: Number(profile?.selling_price_per_kg) || 0,
+      variableCostPerKg: actualVariableCost,
+      fixedExpenses: businessExpenses,
+      desiredProfit: Number(profile?.desired_profit) || 0,
+    })
+    const activeResult = actualBreakEvenResult || planResult
 
-    if (factRawPurchasePrice > 0 && price > 0 && factYieldPct > 0) {
-        const yieldRatio = factYieldPct / 100
-        const realRawCostPerKg = factRawPurchasePrice / yieldRatio
-        const marginPerKg = price - realRawCostPerKg
-
-        if (marginPerKg > 0) {
-            const breakEvenFinishedKg = businessExpenses / marginPerKg
-            const targetFinishedKg = (businessExpenses + desiredProfit) / marginPerKg
-            const activeKg = targetFinishedKg > 0 ? targetFinishedKg : breakEvenFinishedKg
-            const businessExpensePerKg = activeKg > 0 ? businessExpenses / activeKg : 0
-            
-            actualBreakEvenResult = {
-                rawPurchasePricePerKg: factRawPurchasePrice,
-                yieldPercent: factYieldPct,
-                realRawCostPerKg,
-                sellingPricePerKg: price,
-                marginPerKg,
-                businessExpenses,
-                desiredProfit,
-                breakEvenFinishedKg,
-                breakEvenRawKg: breakEvenFinishedKg / yieldRatio,
-                breakEvenRevenue: breakEvenFinishedKg * price,
-                targetFinishedKg,
-                targetRawKg: targetFinishedKg / yieldRatio,
-                targetRevenue: targetFinishedKg * price,
-                businessExpensePerKg,
-                fullCostPerKg: realRawCostPerKg + businessExpensePerKg,
-                netProfitPerKg: price - (realRawCostPerKg + businessExpensePerKg),
-            }
-        }
+    const paceFor = (goal: number | null) => {
+      if (!goal || dailyCapacity <= 0) {
+        return { initial: null, actual: null, diff: null, status: 'no_data' as PaceStatus }
+      }
+      const initial = goal / dailyCapacity
+      const remaining = Math.max(0, goal - totalSoldThisMonth)
+      const actual = remaining / dailyCapacity
+      if (daysWorked === 0) return { initial, actual, diff: null, status: 'no_data' as PaceStatus }
+      const diff = initial - daysWorked - actual
+      const rounded = Math.round(diff * 10) / 10
+      const status: PaceStatus = rounded > 0 ? 'ahead' : rounded < 0 ? 'behind' : 'on_track'
+      return { initial, actual, diff, status }
     }
 
-    const activeResult = actualBreakEvenResult || breakEvenResult
-
-    // 3. МЕТРИКИ ТЕМПА
-    let initialDaysToBreakEven: number | null = null
-    let actualDaysToBreakEven: number | null = null
-    let breakEvenDiffDays: number | null = null
-    let breakEvenStatus: PaceStatus = 'no_data'
-
-    let initialDaysToTarget: number | null = null
-    let actualDaysToTarget: number | null = null
-    let targetDiffDays: number | null = null
-    let targetStatus: PaceStatus = 'no_data'
-
-    if (activeResult && dailyCapacity > 0) {
-      // ТОЧКА 0
-      initialDaysToBreakEven = activeResult.breakEvenFinishedKg / dailyCapacity
-      const expectedDaysLeftBE = initialDaysToBreakEven - daysWorked
-      const remainingForBreakEven = Math.max(0, activeResult.breakEvenFinishedKg - totalProducedThisMonth)
-      actualDaysToBreakEven = remainingForBreakEven / dailyCapacity
-      
-      if (daysWorked > 0) {
-        breakEvenDiffDays = expectedDaysLeftBE - actualDaysToBreakEven
-        const diffBE = Math.round(breakEvenDiffDays * 10) / 10
-        if (diffBE > 0) breakEvenStatus = 'ahead'
-        else if (diffBE < 0) breakEvenStatus = 'behind'
-        else breakEvenStatus = 'on_track'
-      }
-
-      // ЖЕЛАЕМАЯ ПРИБЫЛЬ
-      if (activeResult.desiredProfit > 0) {
-        initialDaysToTarget = activeResult.targetFinishedKg / dailyCapacity
-        const expectedDaysLeftTarget = initialDaysToTarget - daysWorked
-        const remainingForTarget = Math.max(0, activeResult.targetFinishedKg - totalProducedThisMonth)
-        actualDaysToTarget = remainingForTarget / dailyCapacity
-        
-        if (daysWorked > 0) {
-          targetDiffDays = expectedDaysLeftTarget - actualDaysToTarget
-          const diffTarget = Math.round(targetDiffDays * 10) / 10
-          if (diffTarget > 0) targetStatus = 'ahead'
-          else if (diffTarget < 0) targetStatus = 'behind'
-          else targetStatus = 'on_track'
-        }
-      }
-    }
-    const monthGoal = activeResult
-      ? (activeResult.desiredProfit > 0 ? activeResult.targetFinishedKg : activeResult.breakEvenFinishedKg)
+    const breakEvenPace = paceFor(activeResult?.breakEvenFinishedKg ?? null)
+    const targetPace = paceFor(activeResult && activeResult.desiredProfit > 0 ? activeResult.targetFinishedKg : null)
+    const goal = activeResult
+      ? activeResult.desiredProfit > 0 ? activeResult.targetFinishedKg : activeResult.breakEvenFinishedKg
       : 0
-
-    const progressPercent = monthGoal > 0 ? Math.min(150, (totalProducedThisMonth / monthGoal) * 100) : 0
-
-    // Return objects...
 
     return {
       totalProducedThisMonth,
+      totalSoldThisMonth,
       daysWorked,
-      progressPercent,
+      progressPercent: goal > 0 ? Math.min(150, (totalSoldThisMonth / goal) * 100) : 0,
       realYieldPercent,
       realRawPurchasePrice,
       actualBreakEvenResult,
-      
-      initialDaysToBreakEven,
-      actualDaysToBreakEven,
-      breakEvenDiffDays,
-      breakEvenStatus,
-      
-      initialDaysToTarget,
-      actualDaysToTarget,
-      targetDiffDays,
-      targetStatus
+      initialDaysToBreakEven: breakEvenPace.initial,
+      actualDaysToBreakEven: breakEvenPace.actual,
+      breakEvenDiffDays: breakEvenPace.diff,
+      breakEvenStatus: breakEvenPace.status,
+      initialDaysToTarget: targetPace.initial,
+      actualDaysToTarget: targetPace.actual,
+      targetDiffDays: targetPace.diff,
+      targetStatus: targetPace.status,
     }
-  }, [profile, dailyProduction, calculate])
+  }, [profile, calculate, dailyProduction, incomes, rawMaterialPurchases, belongsToPeriod, periodExpenses, businessExpenses])
 
   return {
     profile,
     loading,
     businessExpenses,
+    variableExpenses,
     updateProfile,
     resetEntireBusiness,
     calculate,

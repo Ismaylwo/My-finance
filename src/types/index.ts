@@ -11,6 +11,9 @@ export interface Profile {
   daily_capacity_kg: number         // Производительность в день (кг/день)
   initial_raw_kg: number            // Начальный остаток неготового сырья
   initial_finished_kg: number       // Начальный остаток готового сырья
+  initial_raw_cost_per_kg: number   // Стоимость 1 кг начального остатка сырья
+  initial_finished_cost_per_kg: number // Стоимость 1 кг начального остатка готовой продукции
+  variable_cost_per_kg: number      // Плановые переменные затраты на 1 кг готовой продукции
   created_at: string
   updated_at: string
 }
@@ -56,6 +59,7 @@ export type PaceStatus = 'ahead' | 'on_track' | 'behind' | 'no_data'
 
 export interface ProductionPace {
   totalProducedThisMonth: number     // Уже произведено в этом месяце (кг)
+  totalSoldThisMonth: number         // Продано в выбранном периоде (финансовый прогресс)
   daysWorked: number                 // Количество отработанных дней (смен)
 
   // Метрики для Точки 0
@@ -92,6 +96,18 @@ export interface Income {
 
 export type IncomeInsert = Omit<Income, 'id' | 'user_id' | 'total_amount' | 'created_at'>
 
+export interface IncomePayment {
+  id: string
+  user_id: string
+  income_id: string
+  date: string
+  amount: number
+  notes: string | null
+  created_at: string
+}
+
+export type IncomePaymentInsert = Omit<IncomePayment, 'id' | 'user_id' | 'created_at'>
+
 // ─── Бизнес расходы ─────────────────────────────────────────────
 
 export interface Expense {
@@ -100,6 +116,7 @@ export interface Expense {
   date: string
   amount: number                     // сумма (TJS)
   category: string
+  expense_type: 'fixed' | 'production_variable' | 'selling_variable' | 'variable'
   description: string | null
   created_at: string
 }
@@ -127,6 +144,16 @@ export interface MonthlySummary {
   total_personal: number
   net_profit: number
   total_kg_sold: number
+  paid_income: number
+  receivables: number
+  operating_expenses: number
+  recognized_operating_expenses: number
+  inventory_purchases: number
+  estimated_cogs: number
+  cash_result: number
+  cash_after_personal: number
+  gross_profit: number
+  calculation_ready: boolean
 }
 
 export interface DashboardStats {
@@ -135,6 +162,18 @@ export interface DashboardStats {
   totalPersonal: number
   netProfit: number
   totalKgSold: number
+  paidIncome: number
+  receivables: number
+  totalReceivables: number
+  operatingExpenses: number
+  inventoryPurchases: number
+  estimatedCogs: number
+  cashResult: number
+  cashAfterPersonal: number
+  grossProfit: number
+  rawInventoryValue: number
+  finishedInventoryValue: number
+  calculationReady: boolean
   incomeTrend?: number                // % прироста выручки по сравнению с прошлым месяцем
   expenseTrend?: number               // % прироста расходов по сравнению с прошлым месяцем
   profitTrend?: number                // % прироста чистой прибыли по сравнению с прошлым месяцем
@@ -147,6 +186,7 @@ export interface BreakEvenResult {
   realRawCostPerKg: number           // Реальная себестоимость сырья = 2.50 / 0.90 = 2.78 сом/кг
   sellingPricePerKg: number          // Цена продажи готового сырья (например 6.50)
   marginPerKg: number                // Маржинальный доход с 1 кг = 6.50 - 2.78 = 3.72 сом/кг
+  variableCostPerKg: number          // Переменные затраты на 1 кг помимо сырья
   businessExpenses: number           // Все расходы бизнеса за месяц (аренда, зп, коммуналка...)
   desiredProfit: number              // Сохранённая целевая прибыль (сом)
 
@@ -202,7 +242,9 @@ export function formatCurrency(amount: number): string {
 }
 
 export function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('ru-RU', {
+  const [year, month, day] = dateStr.slice(0, 10).split('-').map(Number)
+  const date = year && month && day ? new Date(year, month - 1, day) : new Date(dateStr)
+  return date.toLocaleDateString('ru-RU', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

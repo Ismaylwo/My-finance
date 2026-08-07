@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useAppContext } from './useAppContext'
-import type { MonthlySummary, DashboardStats } from '../types'
+import { calculatePeriodFinance, calculateTrend } from '../lib/finance'
+import type { DashboardStats, MonthlySummary } from '../types'
 
 const MONTH_NAMES_RU: Record<string, string> = {
   '01': 'Январь', '02': 'Февраль', '03': 'Март', '04': 'Апрель',
@@ -10,133 +11,146 @@ const MONTH_NAMES_RU: Record<string, string> = {
 
 export function formatMonthName(monthStr: string): string {
   if (monthStr === 'all') return 'За всё время'
-  const [yyyy, mm] = monthStr.split('-')
-  const name = MONTH_NAMES_RU[mm] ?? mm
-  return `${name} ${yyyy}`
+  const [year, month] = monthStr.split('-')
+  return `${MONTH_NAMES_RU[month] ?? month} ${year}`
 }
 
 export function useDashboard() {
   const now = new Date()
-  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-
-  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr)
-  const { incomes, expenses, personalExpenses, rawMaterialPurchases, loading, refetchAll } = useAppContext()
+  const currentYear = now.getFullYear()
+  const currentMonthIndex = now.getMonth()
+  const currentMonth = `${currentYear}-${String(currentMonthIndex + 1).padStart(2, '0')}`
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth)
+  const {
+    profile,
+    incomes,
+    incomePayments,
+    paymentsAvailable,
+    expenses,
+    personalExpenses,
+    rawMaterialPurchases,
+    dailyProduction,
+    inventoryLedger,
+    loading,
+    refetchAll,
+  } = useAppContext()
 
   const monthOptions = useMemo(() => {
-    const opts: { value: string; label: string }[] = []
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      opts.push({ value: val, label: formatMonthName(val) })
-    }
-    opts.push({ value: 'all', label: 'За всё время' })
-    return opts
-  }, [now.getFullYear(), now.getMonth()])
+    const options = Array.from({ length: 12 }, (_, index) => {
+      const date = new Date(currentYear, currentMonthIndex - index, 1)
+      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      return { value, label: formatMonthName(value) }
+    })
+    return [...options, { value: 'all', label: 'За всё время' }]
+  }, [currentYear, currentMonthIndex])
+
+  const financeFor = useCallback((month: string) => {
+    const includes = (date: string) => month === 'all' || date.startsWith(month)
+    return calculatePeriodFinance({
+      incomes: incomes.filter(item => includes(item.date)),
+      expenses: expenses.filter(item => includes(item.date)),
+      personalExpenses: personalExpenses.filter(item => includes(item.date)),
+      rawMaterialPurchases: rawMaterialPurchases.filter(item => includes(item.date)),
+      dailyProduction: dailyProduction.filter(item => includes(item.date)),
+      paymentsInPeriod: incomePayments.filter(item => includes(item.date)),
+      allPayments: incomePayments,
+      usePaymentLedger: paymentsAvailable,
+      cogsByIncomeId: inventoryLedger.cogsByIncomeId,
+      fallbackRawPrice: Number(profile?.raw_purchase_price_per_kg) || 0,
+      fallbackYieldPercent: Number(profile?.yield_percent) || 0,
+    })
+  }, [incomes, expenses, personalExpenses, rawMaterialPurchases, dailyProduction, incomePayments, paymentsAvailable, inventoryLedger, profile])
 
   const stats = useMemo(() => {
-    const isAll = selectedMonth === 'all'
-    const selIncomes  = incomes.filter(i => isAll || i.date.startsWith(selectedMonth))
-    const selExpenses = expenses.filter(e => isAll || e.date.startsWith(selectedMonth))
-    const selPersonals = personalExpenses.filter(p => isAll || p.date.startsWith(selectedMonth))
-    const selPurchases = rawMaterialPurchases.filter(p => isAll || p.date.startsWith(selectedMonth))
-
-    const totalIncome   = selIncomes.reduce((s, r) => s + (Number(r.total_amount) || 0), 0)
-    const totalKgSold   = selIncomes.reduce((s, r) => s + (Number(r.quantity_kg) || 0), 0)
-    
-    // Расходы бизнеса + Траты на закупку сырья
-    const bizExpenses   = selExpenses.reduce((s, r) => s + (Number(r.amount) || 0), 0)
-    const rawCosts      = selPurchases.reduce((s, r) => s + (Number(r.total_cost) || 0), 0)
-    
-    const totalExpenses = bizExpenses + rawCosts
-    const totalPersonal = selPersonals.reduce((s, r) => s + (Number(r.amount) || 0), 0)
-    const netProfit     = totalIncome - totalExpenses
-
+    const current = financeFor(selectedMonth)
+    const allTime = selectedMonth === 'all' ? current : financeFor('all')
     let incomeTrend: number | undefined
     let expenseTrend: number | undefined
     let profitTrend: number | undefined
 
-    if (!isAll) {
-      const [yyyy, mm] = selectedMonth.split('-').map(Number)
-      const prevD = new Date(yyyy, mm - 2, 1)
-      const prevPrefix = `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, '0')}`
-
-      const prevIncomes  = incomes.filter(i => i.date.startsWith(prevPrefix))
-      const prevExpenses = expenses.filter(e => e.date.startsWith(prevPrefix))
-      const prevPurchases = rawMaterialPurchases.filter(p => p.date.startsWith(prevPrefix))
-
-      const prevIncTotal = prevIncomes.reduce((s, r) => s + (Number(r.total_amount) || 0), 0)
-      const prevBizExp   = prevExpenses.reduce((s, r) => s + (Number(r.amount) || 0), 0)
-      const prevRawExp   = prevPurchases.reduce((s, r) => s + (Number(r.total_cost) || 0), 0)
-      const prevExpTotal = prevBizExp + prevRawExp
-      const prevNetProfit = prevIncTotal - prevExpTotal
-
-      incomeTrend  = prevIncTotal > 0 ? ((totalIncome - prevIncTotal) / prevIncTotal) * 100 : undefined
-      expenseTrend = prevExpTotal > 0 ? ((totalExpenses - prevExpTotal) / prevExpTotal) * 100 : undefined
-      profitTrend  = prevNetProfit > 0 ? ((netProfit - prevNetProfit) / prevNetProfit) * 100 : undefined
+    if (selectedMonth !== 'all') {
+      const [year, month] = selectedMonth.split('-').map(Number)
+      const previousDate = new Date(year, month - 2, 1)
+      const previousMonth = `${previousDate.getFullYear()}-${String(previousDate.getMonth() + 1).padStart(2, '0')}`
+      const previous = financeFor(previousMonth)
+      incomeTrend = calculateTrend(current.salesRevenue, previous.salesRevenue)
+      expenseTrend = calculateTrend(current.totalAccountingExpenses, previous.totalAccountingExpenses)
+      profitTrend = calculateTrend(current.estimatedNetProfit, previous.estimatedNetProfit)
     }
 
     return {
-      totalIncome, totalExpenses, totalPersonal, netProfit, totalKgSold,
-      incomeTrend, expenseTrend, profitTrend
-    } as DashboardStats
-  }, [incomes, expenses, personalExpenses, rawMaterialPurchases, selectedMonth])
+      totalIncome: current.salesRevenue,
+      totalExpenses: current.totalAccountingExpenses,
+      totalPersonal: current.personalWithdrawals,
+      netProfit: current.estimatedNetProfit,
+      totalKgSold: current.totalKgSold,
+      paidIncome: current.paidRevenue,
+      receivables: current.receivables,
+      totalReceivables: allTime.receivables,
+      operatingExpenses: current.operatingExpenses,
+      inventoryPurchases: current.inventoryPurchases,
+      estimatedCogs: current.estimatedCostOfGoodsSold,
+      cashResult: current.cashResult,
+      cashAfterPersonal: current.cashAfterPersonal,
+      grossProfit: current.grossProfit,
+      rawInventoryValue: inventoryLedger.rawValue,
+      finishedInventoryValue: inventoryLedger.finishedValue,
+      calculationReady: current.calculationReady,
+      incomeTrend,
+      expenseTrend,
+      profitTrend,
+    } satisfies DashboardStats
+  }, [selectedMonth, financeFor, inventoryLedger.rawValue, inventoryLedger.finishedValue])
 
   const categoryBreakdown = useMemo(() => {
-    const isAll = selectedMonth === 'all'
-    const selExpenses = expenses.filter(e => isAll || e.date.startsWith(selectedMonth))
-    const categoryMap: Record<string, number> = {}
-    
-    selExpenses.forEach(exp => {
-      const cat = exp.category || 'Прочее'
-      categoryMap[cat] = (categoryMap[cat] || 0) + (exp.amount || 0)
+    const includes = (date: string) => selectedMonth === 'all' || date.startsWith(selectedMonth)
+    const categories: Record<string, number> = {}
+    expenses.filter(item => includes(item.date)).forEach(item => {
+      const category = item.category || 'Прочее'
+      categories[category] = (categories[category] || 0) + (Number(item.amount) || 0)
     })
-    
-    // Добавляем Закупки сырья как отдельную категорию расходов в диаграмме
-    const selPurchases = rawMaterialPurchases.filter(p => isAll || p.date.startsWith(selectedMonth))
-    const totalPurchases = selPurchases.reduce((s, r) => s + (Number(r.total_cost) || 0), 0)
-    if (totalPurchases > 0) {
-      categoryMap['Закупка сырья (Склад)'] = totalPurchases
-    }
-    
-    return Object.entries(categoryMap)
+    const purchases = rawMaterialPurchases
+      .filter(item => includes(item.date))
+      .reduce((sum, item) => sum + (Number(item.total_cost) || 0), 0)
+    if (purchases > 0) categories['Закупка запасов'] = purchases
+    return Object.entries(categories)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
   }, [expenses, rawMaterialPurchases, selectedMonth])
 
-  const monthlyData = useMemo(() => {
-    const months: MonthlySummary[] = []
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-
-      const mIncomes  = incomes.filter(item => item.date.startsWith(monthPrefix))
-      const mExpenses = expenses.filter(item => item.date.startsWith(monthPrefix))
-      const mPersonals = personalExpenses.filter(item => item.date.startsWith(monthPrefix))
-      const mPurchases = rawMaterialPurchases.filter(item => item.date.startsWith(monthPrefix))
-
-      const total_income   = mIncomes.reduce((s, r) => s + (Number(r.total_amount) || 0), 0)
-      const biz_expenses   = mExpenses.reduce((s, r) => s + (Number(r.amount) || 0), 0)
-      const raw_expenses   = mPurchases.reduce((s, r) => s + (Number(r.total_cost) || 0), 0)
-      const total_expenses = biz_expenses + raw_expenses
-      const total_personal = mPersonals.reduce((s, r) => s + (Number(r.amount) || 0), 0)
-      const net_profit     = total_income - total_expenses
-      const total_kg_sold  = mIncomes.reduce((s, r) => s + (Number(r.quantity_kg) || 0), 0)
-
-      months.push({
-        month: monthPrefix,
-        total_income,
-        total_expenses,
-        total_personal,
-        net_profit,
-        total_kg_sold,
-      })
-    }
-    return months
-  }, [now.getFullYear(), now.getMonth(), incomes, expenses, personalExpenses, rawMaterialPurchases])
+  const monthlyData = useMemo(() => Array.from({ length: 6 }, (_, reverseIndex) => {
+    const index = 5 - reverseIndex
+    const date = new Date(currentYear, currentMonthIndex - index, 1)
+    const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    const result = financeFor(month)
+    return {
+      month,
+      total_income: result.salesRevenue,
+      total_expenses: result.totalAccountingExpenses,
+      total_personal: result.personalWithdrawals,
+      net_profit: result.estimatedNetProfit,
+      total_kg_sold: result.totalKgSold,
+      paid_income: result.paidRevenue,
+      receivables: result.receivables,
+      operating_expenses: result.operatingExpenses,
+      recognized_operating_expenses: result.recognizedOperatingExpenses,
+      inventory_purchases: result.inventoryPurchases,
+      estimated_cogs: result.estimatedCostOfGoodsSold,
+      cash_result: result.cashResult,
+      cash_after_personal: result.cashAfterPersonal,
+      gross_profit: result.grossProfit,
+      calculation_ready: result.calculationReady,
+    } satisfies MonthlySummary
+  }), [currentYear, currentMonthIndex, financeFor])
 
   return {
-    stats, monthlyData, categoryBreakdown, loading,
-    selectedMonth, setSelectedMonth, monthOptions,
-    refetch: () => refetchAll(true)
+    stats,
+    monthlyData,
+    categoryBreakdown,
+    loading,
+    selectedMonth,
+    setSelectedMonth,
+    monthOptions,
+    refetch: () => refetchAll(true),
   }
 }

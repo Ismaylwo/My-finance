@@ -4,15 +4,22 @@ import { useExpenses } from '../hooks/useExpenses'
 import StatCard from '../components/StatCard'
 import { formatCurrency, formatDate, EXPENSE_CATEGORIES, CURRENCY } from '../types'
 import type { ExpenseInsert } from '../types'
+import { localDateInputValue } from '../lib/finance'
 
-const today = () => new Date().toISOString().split('T')[0]
+const today = localDateInputValue
+
+const expenseTypeLabel = (type: string) => {
+  if (type === 'production_variable' || type === 'variable') return 'На производство'
+  if (type === 'selling_variable') return 'На продажу'
+  return 'Постоянный'
+}
 
 export default function ExpensesPage() {
   const { expenses, loading, add, remove, total } = useExpenses()
   const [showForm, setShowForm] = useState(false)
   const [isCompact, setIsCompact] = useState(false)
   const [form, setForm] = useState<ExpenseInsert>({
-    date: today(), amount: 0, category: EXPENSE_CATEGORIES[0], description: ''
+    date: today(), amount: 0, category: EXPENSE_CATEGORIES[0], expense_type: 'fixed', description: ''
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -26,14 +33,15 @@ export default function ExpensesPage() {
     if (error) setError(error)
     else {
       setShowForm(false)
-      setForm({ date: today(), amount: 0, category: EXPENSE_CATEGORIES[0], description: '' })
+      setForm({ date: today(), amount: 0, category: EXPENSE_CATEGORIES[0], expense_type: 'fixed', description: '' })
     }
     setSaving(false)
   }
 
   const handleDelete = async (id: string) => {
     setDeleting(id)
-    await remove(id)
+    const result = await remove(id)
+    if (result.error) setError(result.error)
     setDeleting(null)
   }
 
@@ -56,7 +64,7 @@ export default function ExpensesPage() {
       </div>
 
       <StatCard title="Всего расходов бизнеса" value={total} icon={TrendingDown} variant="expense"
-        subtitle="Автоматически учитываются в точке 0" />
+        subtitle="Постоянные и производственно-переменные" />
 
       {/* Form */}
       {showForm && (
@@ -70,7 +78,7 @@ export default function ExpensesPage() {
               <label className="label">Дата</label>
               <input type="date" value={form.date}
                 onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                className="input-field" required />
+                className="input-field" max={today()} required />
             </div>
             <div>
               <label className="label">Сумма ({CURRENCY})</label>
@@ -86,6 +94,24 @@ export default function ExpensesPage() {
                 className="input-field">
                 {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Тип расхода для точки безубыточности</label>
+              <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/10 bg-black/10 p-1 sm:grid-cols-3">
+                <button type="button" onClick={() => setForm(f => ({ ...f, expense_type: 'fixed' }))}
+                  className={`rounded-lg px-3 py-2.5 text-xs font-bold transition ${form.expense_type === 'fixed' ? 'bg-sky-400/10 text-sky-300' : 'text-white/35'}`}>
+                  Постоянный
+                </button>
+                <button type="button" onClick={() => setForm(f => ({ ...f, expense_type: 'production_variable' }))}
+                  className={`rounded-lg px-3 py-2.5 text-xs font-bold transition ${form.expense_type === 'production_variable' || form.expense_type === 'variable' ? 'bg-amber-400/10 text-amber-300' : 'text-white/35'}`}>
+                  На производство
+                </button>
+                <button type="button" onClick={() => setForm(f => ({ ...f, expense_type: 'selling_variable' }))}
+                  className={`rounded-lg px-3 py-2.5 text-xs font-bold transition ${form.expense_type === 'selling_variable' ? 'bg-violet-400/10 text-violet-300' : 'text-white/35'}`}>
+                  На продажу
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] leading-5 text-white/30">Производство: упаковка, сдельная работа, энергия выпуска. Продажа: доставка клиенту, комиссия. Постоянный: аренда, оклад, офис.</p>
             </div>
             <div className="sm:col-span-2">
               <label className="label">Описание</label>
@@ -136,6 +162,7 @@ export default function ExpensesPage() {
                 <tr className="border-b border-white/10 bg-white/[0.02]">
                   <th className="px-6 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider">Дата</th>
                   <th className="px-4 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider">Категория</th>
+                  <th className="px-4 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider">Тип</th>
                   <th className="px-4 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider text-right">Сумма</th>
                   <th className="px-4 py-3.5 text-xs font-semibold text-white/40 uppercase tracking-wider">Описание</th>
                   <th className="px-4 py-3.5" />
@@ -150,6 +177,7 @@ export default function ExpensesPage() {
                         {exp.category}
                       </span>
                     </td>
+                    <td className="px-4 py-4 text-xs font-semibold text-white/55">{expenseTypeLabel(exp.expense_type)}</td>
                     <td className="px-4 py-4 text-sm text-right font-extrabold text-rose-400">{formatCurrency(exp.amount)}</td>
                     <td className="px-4 py-4 text-sm text-white/40 max-w-xs truncate">{exp.description || '—'}</td>
                     <td className="px-4 py-4 text-right">
