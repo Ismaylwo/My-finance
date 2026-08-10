@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   BarChart3,
+  BookOpen,
   Boxes,
   ChevronRight,
   CircleDollarSign,
@@ -18,6 +19,7 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { useBreakEven } from '../hooks/useBreakEven'
 import OnboardingPage from '../pages/Onboarding'
+import WelcomeTour from './WelcomeTour'
 
 const navGroups = [
   {
@@ -41,6 +43,12 @@ const navGroups = [
     items: [
       { to: '/breakeven', icon: Target, label: 'Точка безубыточности' },
       { to: '/settings', icon: Settings, label: 'Настройки' },
+    ],
+  },
+  {
+    label: 'Помощь',
+    items: [
+      { to: '/guide', icon: BookOpen, label: 'Обучение системе' },
     ],
   },
 ]
@@ -118,6 +126,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell">
+      <WelcomeTour userId={user?.id} enabled={Boolean(businessName)} onOpenGuide={() => navigate('/guide')} />
       <aside className="sidebar hidden lg:flex"><Sidebar /></aside>
 
       {sidebarOpen && (

@@ -12,6 +12,7 @@ import BreakEvenPage from './pages/BreakEven'
 import AnalyticsPage from './pages/Analytics'
 import SettingsPage from './pages/Settings'
 import WarehousePage from './pages/Warehouse'
+import GuidePage from './pages/Guide'
 
 function AppRoutes() {
   return (
@@ -32,6 +33,7 @@ function AppRoutes() {
                   <Route path="/analytics"  element={<AnalyticsPage />} />
                   <Route path="/warehouse"  element={<WarehousePage />} />
                   <Route path="/settings"   element={<SettingsPage />} />
+                  <Route path="/guide"      element={<GuidePage />} />
                   <Route path="*"           element={<Navigate to="/" replace />} />
                 </Routes>
               </Layout>
